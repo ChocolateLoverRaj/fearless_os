@@ -1,0 +1,11 @@
+boot_dir := "build"
+
+run:
+    mkdir {{ boot_dir }}/EFI/BOOT -p
+    ln -sf $LIMINE_PATH/BOOTX64.EFI {{ boot_dir }}/EFI/BOOT/BOOTX64.EFI
+    ls $LIMINE_PATH
+    # Support acceleration on Linux (kvm), Windows (whpx), MacOS (hvf), falling back to software (tcg) virtualization.
+    qemu-system-x86_64 \
+        -machine q35,accel=kvm:whpx:hvf:tcg \
+        -bios $OVMF_PATH \
+        -drive format=raw,file=fat:rw:{{ boot_dir }}
