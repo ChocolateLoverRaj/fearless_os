@@ -1,7 +1,10 @@
 #![no_std]
 #![no_main]
 
+use core::fmt::Write;
+
 use limine::{BaseRevision, RequestsEndMarker, RequestsStartMarker};
+use uart_16550::{Config, Uart16550Tty};
 
 /// Sets the base revision to the latest revision supported by the crate.
 /// See specification for further info.
@@ -24,6 +27,12 @@ unsafe extern "C" fn entry_point_bsp() -> ! {
     // All limine requests must also be referenced in a called function, otherwise they may be
     // removed by the linker.
     assert!(BASE_REVISION.is_supported());
+    //
+    // SAFETY: The port is valid and we have exclusive access.
+    let mut uart = unsafe { Uart16550Tty::new_port(0x3F8, Config::default()) }
+        .expect("should initialize device");
+    uart.write_str("Hello World!\r\n").unwrap();
+
     hlt_loop();
 }
 

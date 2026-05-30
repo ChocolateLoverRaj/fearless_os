@@ -25,6 +25,7 @@ name = "kernel_x86_64"
 version = "0.1.0"
 dependencies = [
  "limine",
+ "uart_16550",
  "x86_64",
 ]
 
@@ -39,6 +40,15 @@ name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
+
+[[package]]
+name = "uart_16550"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22ee77075ecbc5e1c9b1236d03ff013dd77c7bb06da181c5c44f1f39b6cf3ff2"
+dependencies = [
+ "bitflags",
+]
 
 [[package]]
 name = "volatile"

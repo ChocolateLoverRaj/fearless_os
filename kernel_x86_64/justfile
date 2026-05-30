@@ -1,9 +1,10 @@
 boot_dir := "build"
 
 [arg("accel", long="accel", short="a", value="y")]
+[arg("no_graphic", long="no-graphic", short="n", value="y")]
 [arg("release", long="release", short="r", value="release")]
-[arg("stop", long="stop", short="S", value="stop")]
-run accel='' release='' stop='':
+[arg("stop", long="stop", short="S", value="y")]
+run accel='' release='' stop='' no_graphic='':
     @echo {{ release }}
     mkdir {{ boot_dir }}/EFI/BOOT -p
     ln -sf $LIMINE_PATH/BOOTX64.EFI {{ boot_dir }}/EFI/BOOT/BOOTX64.EFI
@@ -16,4 +17,5 @@ run accel='' release='' stop='':
         -bios $OVMF_PATH \
         -drive format=raw,file=fat:rw:{{ boot_dir }} \
         -s \
-        {{ if stop == 'stop' { '-S' } else { '' } }}
+        {{ if stop == 'stop' { '-S' } else { '' } }} \
+        {{ if no_graphic == 'y' { '--nographic' } else { '' } }}
