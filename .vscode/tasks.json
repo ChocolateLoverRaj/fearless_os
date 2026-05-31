@@ -4,17 +4,38 @@
         {
             "type": "shell",
             "options": {
-                "cwd": "${workspaceFolder}/kernel_x86_64"
+                "cwd": "${workspaceFolder}/kernel_x86_64",
+            },
+            "command": "just",
+            "args": [
+                "run",
+                "-S"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "label": "Start QEMU with GDB Debugging",
+            "isBackground": true,
+            "runOptions": {
+                // You can't have multiple processes listening on port 1234 at the same time
+                "instanceLimit": 1,
+            },
+        },
+        {
+            "type": "shell",
+            "options": {
+                "cwd": "${workspaceFolder}/kernel_riscv64",
             },
             "command": "just",
             "args": [
                 "run",
                 "-S",
+                "-n"
             ],
             "problemMatcher": [
-                "$rustc",
+                "$rustc"
             ],
-            "label": "Start QEMU with GDB Debugging",
+            "label": "Start QEMU with GDB Debugging - riscv64",
             "isBackground": true,
             "runOptions": {
                 // You can't have multiple processes listening on port 1234 at the same time

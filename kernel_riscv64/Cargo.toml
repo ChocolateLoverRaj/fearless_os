@@ -1,0 +1,12 @@
+[package]
+name = "kernel_riscv64"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sbi = "0.3.0"
+
+[[bin]]
+name = "kernel_riscv64"
+test = false
+bench = false

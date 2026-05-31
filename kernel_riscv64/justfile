@@ -1,0 +1,17 @@
+build_dir := "build"
+kernel_file_name := "kernel.img"
+
+[arg("accel", long="accel", short="a", value="y")]
+[arg("no_graphic", long="no-graphic", short="n", value="y")]
+[arg("release", long="release", short="r", value="y")]
+[arg("stop", long="stop", short="S", value="y")]
+run accel='' release='' stop='' no_graphic='':
+    mkdir -p {{ build_dir }}
+    cargo objcopy --target riscv64gc-unknown-none-elf {{ if release == 'y' { '--release' } else { '' } }} -- -O binary {{ build_dir }}/{{ kernel_file_name }}
+    qemu-system-riscv64 \
+        --machine virt,accel={{ if accel == 'y' { 'kvm:tcg' } else { 'tcg' } }} \
+        --no-reboot \
+        --kernel {{ build_dir }}/{{ kernel_file_name }} \
+        -s \
+        {{ if stop == 'y' { '-S' } else { '' } }} \
+        {{ if no_graphic == 'y' { '--nographic --serial mon:stdio' } else { '' } }}

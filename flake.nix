@@ -45,6 +45,9 @@
               limine
               just
               gdb
+              dtc
+              cargo-binutils
+              llvm
             ];
           };
       }

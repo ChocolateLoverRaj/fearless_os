@@ -14,9 +14,24 @@
             ],
             "processCreateCommands": [
                 "gdb-remote localhost:1234",
-                "continue",
+                "continue"
             ],
             "preLaunchTask": "Start QEMU with GDB Debugging",
+        },
+        {
+            "name": "Debug riscv64 kernel in QEMU",
+            "type": "lldb",
+            "cwd": "${workspaceFolder}/kernel_x86_64",
+            "request": "launch",
+            "targetCreateCommands": [
+                "target create ${workspaceFolder}/kernel_riscv64/target/riscv64gc-unknown-none-elf/debug/kernel_riscv64",
+                "target modules load --file kernel_riscv64 --slide 0x80200000",
+            ],
+            "processCreateCommands": [
+                "gdb-remote localhost:1234",
+                // "continue",
+            ],
+            "preLaunchTask": "Start QEMU with GDB Debugging - riscv64",
         },
     ],
 }
