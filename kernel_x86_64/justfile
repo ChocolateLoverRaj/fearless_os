@@ -2,20 +2,20 @@ boot_dir := "build"
 
 [arg("accel", long="accel", short="a", value="y")]
 [arg("no_graphic", long="no-graphic", short="n", value="y")]
-[arg("release", long="release", short="r", value="release")]
+[arg("release", long="release", short="r", value="y")]
 [arg("stop", long="stop", short="S", value="y")]
 run accel='' release='' stop='' no_graphic='':
     @echo {{ release }}
     mkdir {{ boot_dir }}/EFI/BOOT -p
     ln -sf $LIMINE_PATH/BOOTX64.EFI {{ boot_dir }}/EFI/BOOT/BOOTX64.EFI
     ln -sf ../limine.conf {{ boot_dir }}/limine.conf
-    cargo build --target x86_64-unknown-none {{ if release == 'release' { '--release' } else { '' } }}
-    ln -sf ../target/x86_64-unknown-none/{{ if release == 'release' { 'release' } else { 'debug' } }}/kernel_x86_64 {{ boot_dir }}/kernel
+    cargo build --target x86_64-unknown-none {{ if release == 'y' { '--release' } else { '' } }}
+    ln -sf ../target/x86_64-unknown-none/{{ if release == 'y' { 'release' } else { 'debug' } }}/kernel_x86_64 {{ boot_dir }}/kernel
     # Support acceleration on Linux (kvm), Windows (whpx), MacOS (hvf), falling back to software (tcg) virtualization.
     qemu-system-x86_64 \
         -machine q35,accel={{ if accel == 'y' { 'kvm:whpx:hvf:tcg' } else { 'tcg' } }} \
         -bios $OVMF_PATH \
         -drive format=raw,file=fat:rw:{{ boot_dir }} \
         -s \
-        {{ if stop == 'stop' { '-S' } else { '' } }} \
+        {{ if stop == 'y' { '-S' } else { '' } }} \
         {{ if no_graphic == 'y' { '--nographic' } else { '' } }}

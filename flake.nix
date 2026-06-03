@@ -48,6 +48,7 @@
               dtc
               cargo-binutils
               llvm
+              lldb
             ];
           };
       }

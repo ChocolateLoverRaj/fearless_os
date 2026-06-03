@@ -1,37 +1,52 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "Debug kernel in QEMU",
-            "type": "lldb",
-            "cwd": "${workspaceFolder}/kernel_x86_64",
-            "request": "launch",
-            "targetCreateCommands": [
-                "target create ${workspaceFolder}/kernel_x86_64/build/kernel",
-            ],
-            "processCreateCommands": [
-                "gdb-remote localhost:1234",
-                "continue"
-            ],
-            "preLaunchTask": "Start QEMU with GDB Debugging",
-        },
-        {
-            "name": "Debug riscv64 kernel in QEMU",
-            "type": "lldb",
-            "cwd": "${workspaceFolder}/kernel_x86_64",
-            "request": "launch",
-            "targetCreateCommands": [
-                "target create ${workspaceFolder}/kernel_riscv64/target/riscv64gc-unknown-none-elf/debug/kernel_riscv64",
-                "target modules load --file kernel_riscv64 --slide 0x80200000",
-            ],
-            "processCreateCommands": [
-                "gdb-remote localhost:1234",
-                // "continue",
-            ],
-            "preLaunchTask": "Start QEMU with GDB Debugging - riscv64",
-        },
-    ],
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "x86_64",
+      "type": "lldb",
+      "cwd": "${workspaceFolder}/kernel_x86_64",
+      "request": "launch",
+      "targetCreateCommands": [
+        "target create ${workspaceFolder}/kernel_x86_64/build/kernel",
+      ],
+      "processCreateCommands": [
+        "gdb-remote localhost:1234",
+        "continue"
+      ],
+      "preLaunchTask": "x86_64",
+    },
+    {
+      "name": "riscv64",
+      "type": "lldb",
+      "request": "launch",
+      "targetCreateCommands": [
+        "target create ${workspaceFolder}/kernel_riscv64/target/riscv64gc-unknown-none-elf/debug/kernel_riscv64",
+        "target modules load --file kernel_riscv64 --slide 0x80200000",
+      ],
+      "processCreateCommands": [
+        "gdb-remote localhost:1234",
+        "b kernel_main",
+        "continue",
+      ],
+      "preLaunchTask": "riscv64",
+    },
+    {
+      "name": "aarch64",
+      "type": "lldb",
+      "request": "launch",
+      "targetCreateCommands": [
+        "target create ${workspaceFolder}/kernel_aarch64/target/aarch64-unknown-none-softfloat/debug/kernel_aarch64",
+        "target modules load --file kernel_aarch64 --slide 0x200000",
+      ],
+      "processCreateCommands": [
+        "gdb-remote localhost:1234",
+        "b kernel_main",
+        "continue"
+      ],
+      "preLaunchTask": "aarch64",
+    },
+  ],
 }
