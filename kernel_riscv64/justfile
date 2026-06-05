@@ -14,4 +14,10 @@ run accel='' release='' stop='' no_graphic='':
         --kernel {{ build_dir }}/{{ kernel_file_name }} \
         -s \
         {{ if stop == 'y' { '-S' } else { '' } }} \
-        {{ if no_graphic == 'y' { '--nographic --serial mon:stdio' } else { '' } }}
+        {{ if no_graphic == 'y' { '--nographic --serial mon:stdio' } else { '' } }} \
+        --smp 4
+
+dtb:
+    mkdir -p {{ build_dir }}
+    qemu-system-riscv64 --machine virt,dumpdtb={{ build_dir }}/virt.dtb --smp 4
+    dtc -I dtb -O dts -o {{ build_dir }}/virt.dts {{ build_dir }}/virt.dtb
