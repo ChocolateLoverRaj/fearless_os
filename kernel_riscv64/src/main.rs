@@ -4,7 +4,7 @@
 mod console;
 mod logger;
 
-use core::{arch::naked_asm, ptr::addr_of};
+use core::arch::naked_asm;
 
 use riscv::{
     asm::wfi,
@@ -157,18 +157,54 @@ extern "C" fn kernel_main(hart_id: usize, fdt_addr: usize) -> ! {
 
     unsafe { sie::set_stimer() };
 
-    loop {
-        log::info!(".");
-        // wfi();
-        unsafe { sbi::hsm::hart_suspend(SuspendType::DefaultRetentive) }.unwrap();
+    log::info!(".");
+    unsafe {
+        sbi::hsm::hart_suspend(SuspendType::DefaultNonRetentive {
+            resume_address: PhysicalAddress::new(resume_entry as *const () as usize),
+            opaque: 67,
+        })
     }
-    // sbi::legacy::shutdown()
+    .unwrap();
+    unreachable!()
 }
 
-unsafe extern "C" fn other_hart_main(hart_id: usize, extra_input: usize) {
+#[unsafe(naked)]
+unsafe extern "C" fn resume_entry() {
+    naked_asm!(
+        "
+        lla sp, __stack_top
+        j {rust}
+        ",
+        rust = sym resume_main
+    );
+}
+
+unsafe extern "C" fn resume_main(hart_id: usize, extra_input: usize) -> ! {
+    log::info!("hart {hart_id} resumed from suspend with extra input {extra_input}");
+    unsafe {
+        stvec::write(Stvec::new(
+            kernel_entry as *const () as usize,
+            TrapMode::Direct,
+        ))
+    };
+    unsafe { interrupt::enable() };
+    unsafe { sie::set_stimer() };
+    log::info!(".");
+    unsafe {
+        sbi::hsm::hart_suspend(SuspendType::DefaultNonRetentive {
+            resume_address: PhysicalAddress::new(resume_entry as *const () as usize),
+            opaque: 67,
+        })
+    }
+    .unwrap();
+    unreachable!()
+}
+
+unsafe extern "C" fn other_hart_main(hart_id: usize, extra_input: usize) -> ! {
     log::info!("Hello from hart {hart_id} with extra input {extra_input}");
 
     sbi::hsm::hart_stop().unwrap();
+    unreachable!()
 }
 
 #[panic_handler]
