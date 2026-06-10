@@ -61,7 +61,7 @@ SECTIONS {
     /* This is where our stack will go. This doesn't show up in the ELF, and is just memory */
     /* The stack must be aligned to 16 bytes for riscv32 and riscv64 calling conventions */
     . = ALIGN(16);
-    . += 128 * 1024;
+    . += 64 * 4 * 1024;
 
     /* Our assembly code uses this to set up the stack before calling the Rust function */
     __stack_top = . - __kernel_start;

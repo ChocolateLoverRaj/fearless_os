@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+log = { version = "0.4.32", default-features = false }
 riscv = { version = "0.16.1", features = ["s-mode"] }
 sbi = "0.3.0"
+spin = { version = "0.12.0", default-features = false, features = ["mutex", "once", "spin_mutex"] }
 
 [[bin]]
 name = "kernel_riscv64"
