@@ -126,22 +126,24 @@ extern "C" fn kernel_main(hart_id: usize, fdt_addr: usize) -> ! {
     unsafe { logger::init() };
     log::info!("Hello World!");
 
-    let mut hart_id = 0;
-    let mut stack_number = 1; // our stack number is 0
-    while let Ok(state) = sbi::hsm::hart_state(hart_id) {
-        log::info!("Hart {hart_id} state: {state:?}");
-        if state == HartState::Stopped {
-            unsafe {
-                sbi::hsm::hart_start(
-                    hart_id,
-                    PhysicalAddress::new(other_hart_start as *const () as usize),
-                    stack_number,
-                )
+    if sbi::base::probe_extension(sbi::hsm::EXTENSION_ID).is_available() {
+        let mut hart_id = 0;
+        let mut stack_number = 1; // our stack number is 0
+        while let Ok(state) = sbi::hsm::hart_state(hart_id) {
+            log::info!("Hart {hart_id} state: {state:?}");
+            if state == HartState::Stopped {
+                unsafe {
+                    sbi::hsm::hart_start(
+                        hart_id,
+                        PhysicalAddress::new(other_hart_start as *const () as usize),
+                        stack_number,
+                    )
+                }
+                .unwrap();
+                stack_number += 1;
             }
-            .unwrap();
-            stack_number += 1;
+            hart_id += 1;
         }
-        hart_id += 1;
     }
 
     unsafe {
@@ -152,20 +154,31 @@ extern "C" fn kernel_main(hart_id: usize, fdt_addr: usize) -> ! {
     };
     unsafe { interrupt::enable() };
 
-    let time = time::read64();
-    sbi::timer::set_timer(time + 10000).unwrap();
+    if sbi::base::probe_extension(sbi::timer::EXTENSION_ID).is_available() {
+        let time = time::read64();
+        sbi::timer::set_timer(time + 10000).unwrap();
+    }
 
     unsafe { sie::set_stimer() };
 
-    log::info!(".");
-    unsafe {
-        sbi::hsm::hart_suspend(SuspendType::DefaultNonRetentive {
-            resume_address: PhysicalAddress::new(resume_entry as *const () as usize),
-            opaque: 67,
-        })
+    loop {
+        log::info!(".");
+        idle();
     }
-    .unwrap();
-    unreachable!()
+}
+
+fn idle() {
+    if sbi::base::probe_extension(sbi::hsm::EXTENSION_ID).is_available() {
+        unsafe {
+            sbi::hsm::hart_suspend(SuspendType::DefaultNonRetentive {
+                resume_address: PhysicalAddress::new(resume_entry as *const () as usize),
+                opaque: 67,
+            })
+        }
+        .unwrap();
+    } else {
+        wfi();
+    }
 }
 
 #[unsafe(naked)]
@@ -189,15 +202,10 @@ unsafe extern "C" fn resume_main(hart_id: usize, extra_input: usize) -> ! {
     };
     unsafe { interrupt::enable() };
     unsafe { sie::set_stimer() };
-    log::info!(".");
-    unsafe {
-        sbi::hsm::hart_suspend(SuspendType::DefaultNonRetentive {
-            resume_address: PhysicalAddress::new(resume_entry as *const () as usize),
-            opaque: 67,
-        })
+    loop {
+        log::info!(".");
+        idle();
     }
-    .unwrap();
-    unreachable!()
 }
 
 unsafe extern "C" fn other_hart_main(hart_id: usize, extra_input: usize) -> ! {
