@@ -15,9 +15,22 @@ run accel='' release='' stop='' no_graphic='':
         -s \
         {{ if stop == 'y' { '-S' } else { '' } }} \
         {{ if no_graphic == 'y' { '--nographic --serial mon:stdio' } else { '' } }} \
-        --smp 4
+        --smp 4 \
+        -chardev socket,id=chrtpm,path=/tmp/mytpm1/swtpm-sock \
+        -tpmdev emulator,id=tpm0,chardev=chrtpm \
+        -device tpm-tis-device,tpmdev=tpm0
 
 dtb:
     mkdir -p {{ build_dir }}
-    qemu-system-riscv64 --machine virt,dumpdtb={{ build_dir }}/virt.dtb --smp 4
+    qemu-system-riscv64 --machine virt,dumpdtb={{ build_dir }}/virt.dtb \
+        --smp 4 \
+        -chardev socket,id=chrtpm,path=/tmp/mytpm1/swtpm-sock \
+        -tpmdev emulator,id=tpm0,chardev=chrtpm \
+        -device tpm-tis-device,tpmdev=tpm0
     dtc -I dtb -O dts -o {{ build_dir }}/virt.dts {{ build_dir }}/virt.dtb
+
+swtpm:
+    swtpm socket --tpmstate dir=/tmp/mytpm1 \
+        --ctrl type=unixio,path=/tmp/mytpm1/swtpm-sock \
+        --tpm2 \
+        --log level=20

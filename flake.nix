@@ -49,6 +49,7 @@
               cargo-binutils
               llvm
               lldb
+              swtpm
             ];
           };
       }
