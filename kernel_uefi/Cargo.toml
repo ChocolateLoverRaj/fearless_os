@@ -1,0 +1,11 @@
+[package]
+name = "kernel_uefi"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+hex-slice = "0.1.4"
+log = "0.4.32"
+sha1 = { version = "0.10", default-features = false, features = ["force-soft"] }
+sha2 = { version = "0.11.0", default-features = false }
+uefi = { version = "0.37.0", features = ["logger", "panic_handler"] }
