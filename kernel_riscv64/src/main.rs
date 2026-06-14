@@ -3,13 +3,22 @@
 
 mod console;
 mod logger;
+mod paging;
 
-use core::arch::naked_asm;
+use core::{
+    arch::naked_asm,
+    ops::{Deref, DerefMut, RangeInclusive},
+    ptr::{NonNull, addr_of},
+};
 
+use arbitrary_int::u44;
+use fdt::{Fdt, node::MemoryReservation, standard_nodes::MemoryRegion};
+use log::info;
 use riscv::{
     asm::wfi,
     interrupt::{self, Interrupt},
     register::{
+        satp::{self, Satp},
         scause, sepc,
         sie::{self, Sie},
         sip,
@@ -23,14 +32,17 @@ use sbi::{
     PhysicalAddress,
     hsm::{HartState, SuspendType},
 };
+use spin::Mutex;
+
+use crate::paging::{PageTable, map_page};
 
 // These variables are defined in the linker script
 unsafe extern "C" {
-    static __kernel_start: usize;
-    static __kernel_end: usize;
-    static __bss_start: usize;
-    static __bss_end: usize;
-    static __stack_top: usize;
+    static __kernel_start: u8;
+    static __kernel_end: u8;
+    static __bss_start: u8;
+    static __bss_end: u8;
+    static __stack_top: u8;
 }
 
 /// OpenSBI passes the HART ID in the `a0` register and a pointer to the device tree in the `a1`
@@ -108,23 +120,111 @@ unsafe extern "C" fn start() {
     )
 }
 
-#[unsafe(naked)]
-unsafe extern "C" fn other_hart_start() -> ! {
-    naked_asm!(
-        "
-        lla sp, __stack_top
-        li t0, 64 * 1024      # 32 KiB, 1/4 of reserved stack space
-        mul t0, t0, a1        # t0 = stack_number * stack_size
-        sub sp, sp, t0
-        j {rust}
-        ",
-        rust = sym other_hart_main
-    )
-}
+// #[unsafe(naked)]
+// unsafe extern "C" fn other_hart_start() -> ! {
+//     naked_asm!(
+//         "
+//         lla sp, __stack_top
+//         li t0, 64 * 1024      # 32 KiB, 1/4 of reserved stack space
+//         mul t0, t0, a1        # t0 = stack_number * stack_size
+//         sub sp, sp, t0
+//         j {rust}
+//         ",
+//         rust = sym other_hart_main
+//     )
+// }
+
+/// Currently assumes Sv57 paging with just one root page table
+static PAGE_TABLE: Mutex<PageTable> = Mutex::new(PageTable::new());
 
 extern "C" fn kernel_main(hart_id: usize, fdt_addr: usize) -> ! {
-    unsafe { logger::init() };
-    log::info!("Hello World!");
+    unsafe { logger::init() }
+    log::info!("Kernel is logging! HART ID: {hart_id}. *mut FDT = {fdt_addr:#X}");
+    unsafe {
+        stvec::write(Stvec::new(
+            kernel_entry as *const () as usize,
+            TrapMode::Direct,
+        ))
+    };
+    log::debug!("Initialized Interrupts");
+    // Enable paging
+    let fdt = unsafe { Fdt::from_ptr(fdt_addr as *const _) }.unwrap();
+    let mmu_type = fdt
+        .cpus()
+        .find(|cpu| cpu.ids().first() == hart_id)
+        .unwrap()
+        .property("mmu-type")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    // FIXME: Use actual available memory regions and don't just guess
+    let mut memory = addr_of!(__stack_top).addr();
+    // TODO: Support Sv39 and Sv48 too
+    if mmu_type == "riscv,sv57" {
+        let mut page_table = PAGE_TABLE.try_lock().unwrap();
+        let kernel_addr = addr_of!(__kernel_start).addr();
+        let kernel_end_addr = addr_of!(__kernel_end).addr();
+        let kernel_start_ppn = (kernel_addr as u64) >> 12;
+        let kernel_end_ppn = (kernel_end_addr as u64 - 1) >> 12;
+        info!("kernel ppn: {:#X?}", kernel_start_ppn..=kernel_end_ppn);
+        for kernel_ppn in kernel_start_ppn..=kernel_end_ppn {
+            info!("Mapping kernel ppn: {:#X}", kernel_ppn);
+            unsafe {
+                map_page(
+                    kernel_ppn << 12,
+                    u44::new(kernel_ppn),
+                    NonNull::from_mut(page_table.deref_mut()),
+                    || {
+                        let addr = memory.next_multiple_of(0x1000);
+                        memory = addr + 0x1000;
+                        u44::new(addr as u64 >> 12)
+                    },
+                )
+            };
+        }
+        // Leave guard page unmapped
+        let stack_addr = addr_of!(__kernel_end).addr() + 0x1000;
+        let stack_start_ppn = stack_addr as u64 >> 12;
+        let stack_end_ppn = stack_start_ppn + 4;
+        for stack_ppn in stack_start_ppn..stack_end_ppn {
+            info!("Mapping stack: {stack_ppn:#X}");
+            unsafe {
+                map_page(
+                    stack_ppn << 12,
+                    u44::new(stack_ppn),
+                    NonNull::from_mut(page_table.deref_mut()),
+                    || {
+                        let addr = memory.next_multiple_of(0x1000);
+                        memory = addr + 0x1000;
+                        u44::new(addr as u64 >> 12)
+                    },
+                )
+            };
+        }
+        // Map the FDT
+        let fdt_ppn_start = fdt_addr as u64 >> 12;
+        let fdt_ppn_end_inclusive = (fdt_addr as u64 + fdt.total_size() as u64 - 1) >> 12;
+        for fdt_ppn in fdt_ppn_start..=fdt_ppn_end_inclusive {
+            info!("Mapping FDT ppn: {:#X}", fdt_ppn);
+            unsafe {
+                map_page(
+                    fdt_ppn << 12,
+                    u44::new(fdt_ppn),
+                    NonNull::from_mut(page_table.deref_mut()),
+                    || {
+                        let addr = memory.next_multiple_of(0x1000);
+                        memory = addr + 0x1000;
+                        u44::new(addr as u64 >> 12)
+                    },
+                )
+            };
+        }
+        let page_table_ppn = core::ptr::from_ref(page_table.deref()).addr() >> 12;
+        info!("Enabling Sv57");
+        unsafe { satp::set(satp::Mode::Sv57, 0, page_table_ppn) };
+    } else {
+        panic!("Unknown mmu type: {mmu_type:?}");
+    }
 
     if sbi::base::probe_extension(sbi::hsm::EXTENSION_ID).is_available() {
         let mut hart_id = 0;
@@ -132,26 +232,19 @@ extern "C" fn kernel_main(hart_id: usize, fdt_addr: usize) -> ! {
         while let Ok(state) = sbi::hsm::hart_state(hart_id) {
             log::info!("Hart {hart_id} state: {state:?}");
             if state == HartState::Stopped {
-                unsafe {
-                    sbi::hsm::hart_start(
-                        hart_id,
-                        PhysicalAddress::new(other_hart_start as *const () as usize),
-                        stack_number,
-                    )
-                }
-                .unwrap();
+                // unsafe {
+                //     sbi::hsm::hart_start(
+                //         hart_id,
+                //         PhysicalAddress::new(other_hart_start as *const () as usize),
+                //         stack_number,
+                //     )
+                // }
+                // .unwrap();
                 stack_number += 1;
             }
             hart_id += 1;
         }
     }
-
-    unsafe {
-        stvec::write(Stvec::new(
-            kernel_entry as *const () as usize,
-            TrapMode::Direct,
-        ))
-    };
     unsafe { interrupt::enable() };
 
     if sbi::base::probe_extension(sbi::timer::EXTENSION_ID).is_available() {
@@ -223,7 +316,7 @@ fn rust_panic(info: &core::panic::PanicInfo) -> ! {
     loop {}
 }
 
-#[repr(C, packed)]
+#[repr(C)]
 pub struct TrapFrame {
     pub ra: usize,
     pub gp: usize,
@@ -263,8 +356,9 @@ extern "C" fn kernel_entry() {
     naked_asm!(
         "
             .align 4
-            csrw sscratch, sp
-            addi sp, sp, -8 * 31
+            // .a:
+            //     j .a
+            addi sp, sp, -256
 
             sd ra,  8 * 0(sp)
             sd gp,  8 * 1(sp)
@@ -296,9 +390,8 @@ extern "C" fn kernel_entry() {
             sd s9,  8 * 27(sp)
             sd s10, 8 * 28(sp)
             sd s11, 8 * 29(sp)
-
-            csrr a0, sscratch
-            sd a0, 8 * 30(sp)
+            add t0, sp, 256
+            sd t0,  8 * 30(sp)
 
             mv a0, sp
             call {handle_trap}
@@ -333,21 +426,31 @@ extern "C" fn kernel_entry() {
             ld s9,  8 * 27(sp)
             ld s10, 8 * 28(sp)
             ld s11, 8 * 29(sp)
-
             ld sp,  8 * 30(sp)
+
             sret
         ",
         handle_trap = sym handle_trap
     );
 }
 
-extern "C" fn handle_trap(_trap_frame: &TrapFrame) {
+extern "C" fn handle_trap(trap_frame: &TrapFrame) {
     let scause = scause::read();
     let stval = stval::read();
     let user_pc = sepc::read();
-    log::info!("Timer Interrupt!");
-    unsafe { sip::clear_pending(Interrupt::SupervisorTimer) };
-    let time = time::read64();
-    sbi::timer::set_timer(time + 10000000).unwrap();
+    match scause.cause() {
+        scause::Trap::Interrupt(interrupt_vector) => {
+            log::info!("interrupt: {interrupt_vector}");
+            unsafe { sip::clear_pending(Interrupt::SupervisorTimer) };
+            let time = time::read64();
+            sbi::timer::set_timer(time + 10000000).unwrap();
+        }
+        scause::Trap::Exception(exception_code) => {
+            panic!(
+                "Exception: {exception_code} stval={stval:#X}. sepc={user_pc:#X} sp={:#X} trap frame={trap_frame:p}",
+                trap_frame.sp
+            );
+        }
+    }
     // panic!("unexpected trap. scause={scause:#X?}. stval={stval:#X}. sepc={user_pc:#X}.");
 }

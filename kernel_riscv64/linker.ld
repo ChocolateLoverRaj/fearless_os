@@ -58,13 +58,17 @@ SECTIONS {
         __bss_end = .;
     }
 
+    . = ALIGN(0x1000);
+    __kernel_end = .;
+
+    /* Stack guard page here */
+    . += 0x1000;
+
     /* This is where our stack will go. This doesn't show up in the ELF, and is just memory */
     /* The stack must be aligned to 16 bytes for riscv32 and riscv64 calling conventions */
     . = ALIGN(16);
-    . += 64 * 4 * 1024;
+    . += 4 * 0x1000;
 
     /* Our assembly code uses this to set up the stack before calling the Rust function */
-    __stack_top = . - __kernel_start;
-
-    __kernel_end = .;
+    __stack_top = .;
 }
