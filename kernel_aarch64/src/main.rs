@@ -2,6 +2,7 @@
 #![no_main]
 #![feature(stdarch_arm_hints)]
 #![cfg_attr(target_arch = "arm", feature(stdarch_arm_neon_intrinsics))]
+mod bcm2835_aux_uart;
 
 use core::{arch::naked_asm, panic::PanicInfo};
 

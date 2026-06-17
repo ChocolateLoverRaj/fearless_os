@@ -16,7 +16,7 @@ SECTIONS
         . = __kernel_start + 0x8;
         QUAD(0x0);
         /* `image_size` */
-        QUAD(__kernel_end);
+        QUAD(__kernel_end - __kernel_start);
         /* `flags` */
         QUAD(0x0);
         /* `res2` */
@@ -34,25 +34,33 @@ SECTIONS
         *(.text .text.*);
     }
 
+    /* Global immutable vars */
     .rodata :
     {
         *(.rodata .rodata.*)
     }
 
+    /* Global mutable vars */
+    .data :
+    {
+        *(.data)
+    }
+
+    /* Desribes how to do relocations, not needed after relocations are done */
     .rela.dyn : {
+        /* Must be 8-byte aligned so we can do aligned u64 access */
         . = ALIGN(8);
         __rel_start = . - __kernel_start;
         *(.rela*)
         __rel_end = . - __kernel_start;
     }
 
-    .data :
-    {
-        *(.data)
-    }
+    /* This is the end of the .bin file after objcopying */
 
+    /* This is where global variables that are initially 0 are */
     .bss :
     {
+        /* Make it aligned to 8 bytes so we can use u64 writes to zero it */
         . = ALIGN(8);
         __bss_start = . - __kernel_start;
         *(.bss, .bss.*)
@@ -60,15 +68,10 @@ SECTIONS
         __bss_end = . - __kernel_start;
     }
 
+    /* Stack must be 16 bytes aligned */
     . = ALIGN(16);
-    . += 1 * 1024 * 1024;
+    . += 8 * 1024;
     __stack_top = . - __kernel_start;
-
-    . = ALIGN(16);
-    . += 128 * 1024;
-    __interrupt_handler_stack_top = . - __kernel_start;
 
     __kernel_end = .;
 }
-
-__bss_size = __bss_end - __bss_start;
