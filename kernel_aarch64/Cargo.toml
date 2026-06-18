@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bitbybit = "2.0.0"
+volatile = { version = "0.6.1", features = ["derive"] }
 
 [[bin]]
 name = "kernel_aarch64"
