@@ -1,20 +1,22 @@
 #![no_std]
 #![no_main]
-#![feature(stdarch_arm_hints)]
+// #![feature(stdarch_arm_hints)]
 #![cfg_attr(target_arch = "arm", feature(stdarch_arm_neon_intrinsics))]
 mod bcm2835_aux_uart;
+mod logger;
+mod panic_handler;
 
-use core::{arch::naked_asm, panic::PanicInfo, ptr::NonNull};
+use core::{arch::naked_asm, ptr::addr_of};
 
-use crate::bcm2835_aux_uart::Bcm2835AuxUart;
+use aarch64_cpu::{
+    asm::wfi,
+    registers::{CurrentEL, ELR_EL2, HCR_EL2, Readable, SP_EL1, SPSR_EL2, Writeable},
+};
+use log::info;
 
 unsafe extern "C" {
-    static __interrupt_handler_stack_top: usize;
-}
-
-#[panic_handler]
-pub fn panic_handler(panic_info: &PanicInfo) -> ! {
-    loop {}
+    static __kernel_start: u8;
+    static __stack_top: u8;
 }
 
 #[unsafe(link_section = ".text._header")]
@@ -105,15 +107,58 @@ pub unsafe extern "C" fn start() {
 }
 
 unsafe extern "C" fn kernel_main(fdt_addr: usize) -> ! {
-    // FIXME: This is just for testing and is hard-coded for a Raspberry Pi 3B. Use the device tree!
-    let mut uart = unsafe { Bcm2835AuxUart::new(NonNull::new(0x3F215040 as *mut _).unwrap()) };
+    unsafe { logger::init() };
 
-    for &byte in "Hello from Rust Bare Metal!\r\n".as_bytes() {
-        uart.write_sync_no_flush(byte);
+    let el = CurrentEL
+        .read_as_enum::<CurrentEL::EL::Value>(CurrentEL::EL)
+        .unwrap();
+    let kernel_addr = addr_of!(__kernel_start).addr();
+    info!("Hello from the kernel! Loaded at {kernel_addr:#X}, FDT Addr: {fdt_addr:#X}, EL: {el:?}");
+
+    // The Linux boot protocol says that the kernel is started in either EL2 or EL1
+    // Since we're not doing hypervisor stuff, drop down to EL1 if we're in EL2
+    if el == CurrentEL::EL::Value::EL2 {
+        // Set EL1 execution state to AArch64.
+        HCR_EL2.write(HCR_EL2::RW::EL1IsAarch64);
+
+        // Configure that eret will go into EL1 with interrupts disabled
+        SPSR_EL2.write(
+            SPSR_EL2::D::Masked
+                + SPSR_EL2::A::Masked
+                + SPSR_EL2::I::Masked
+                + SPSR_EL2::F::Masked
+                + SPSR_EL2::M::EL1h,
+        );
+
+        // Configure to jump to this fn on eret
+        ELR_EL2.set(kernel_main_el1 as *const () as u64);
+
+        // Configure the stack pointer on eret
+        let stack_top = addr_of!(__stack_top).addr();
+        SP_EL1.set(stack_top as u64);
+
+        info!("Dropping to EL1");
+        unsafe {
+            core::arch::asm!("eret", in("x0") fdt_addr, options(nomem, nostack, noreturn));
+        }
+    } else {
+        kernel_main_el1(fdt_addr);
     }
 
     loop {
-        let byte = uart.read_sync();
-        uart.write_sync_no_flush(byte.to_ascii_uppercase());
+        wfi();
     }
+
+    // loop {
+    //     let byte = uart.read_sync();
+    //     uart.write_sync_no_flush(byte.to_ascii_uppercase());
+    // }
+}
+
+extern "C" fn kernel_main_el1(fdt_addr: usize) {
+    let el = CurrentEL
+        .read_as_enum::<CurrentEL::EL::Value>(CurrentEL::EL)
+        .unwrap();
+    assert_eq!(el, CurrentEL::EL::Value::EL1);
+    info!("Hello from EL1");
 }

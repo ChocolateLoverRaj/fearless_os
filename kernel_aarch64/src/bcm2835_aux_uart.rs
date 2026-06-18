@@ -1,4 +1,4 @@
-use core::ptr::NonNull;
+use core::{fmt::Write, ptr::NonNull};
 
 use bitbybit::bitfield;
 use volatile::{
@@ -58,5 +58,14 @@ impl Bcm2835AuxUart {
     pub fn read_sync(&mut self) -> u8 {
         while !Lsr::new_with_raw_value(self.p.as_mut_ptr().lsr().read()).data_ready() {}
         self.p.as_mut_ptr().io().read() as u8
+    }
+}
+
+impl Write for Bcm2835AuxUart {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for &byte in s.as_bytes() {
+            self.write_sync_no_flush(byte);
+        }
+        Ok(())
     }
 }
