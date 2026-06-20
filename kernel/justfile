@@ -1,0 +1,45 @@
+build_dir := "build"
+
+[arg("accel", long="accel", short="a", value="y")]
+[arg("no_graphic", long="no-graphic", short="n", value="y")]
+[arg("release", long="release", short="r", value="y")]
+[arg("stop", long="stop", short="S", value="y")]
+run accel='' release='' stop='' no_graphic='':
+    @echo {{ release }}
+    mkdir {{ build_dir }}/EFI/BOOT -p
+    ln -sf $LIMINE_PATH/BOOTX64.EFI {{ build_dir }}/EFI/BOOT/BOOTX64.EFI
+    ln -sf ../limine.conf {{ build_dir }}/limine.conf
+    cargo build --target x86_64-unknown-none {{ if release == 'y' { '--release' } else { '' } }}
+    ln -sf ../target/x86_64-unknown-none/{{ if release == 'y' { 'release' } else { 'debug' } }}/kernel {{ build_dir }}/kernel
+    # Support acceleration on Linux (kvm), Windows (whpx), MacOS (hvf), falling back to software (tcg) virtualization.
+    qemu-system-x86_64 \
+        -machine q35,accel={{ if accel == 'y' { 'kvm:whpx:hvf:tcg' } else { 'tcg' } }} \
+        -bios $OVMF_PATH \
+        -drive format=raw,file=fat:rw:{{ build_dir }} \
+        -s \
+        {{ if stop == 'y' { '-S' } else { '' } }} \
+        {{ if no_graphic == 'y' { '--nographic' } else { '' } }}
+
+[arg("accel", long="accel", short="a", value="y")]
+uefi accel='':
+    mkdir -p {{ build_dir }}/EFI/BOOT
+    cargo build --target x86_64-unknown-uefi
+    ln -sf ../../../target/x86_64-unknown-uefi/debug/kernel.efi {{ build_dir }}/EFI/BOOT/BOOTX64.EFI
+    qemu-system-x86_64 -enable-kvm \
+        -machine q35,accel={{ if accel == 'y' { 'kvm:whpx:hvf:tcg' } else { 'tcg' } }} \
+        -drive if=pflash,format=raw,readonly=on,file=$OVMF_PATH \
+        -drive format=raw,file=fat:rw:{{ build_dir }} \
+        -chardev socket,id=chrtpm,path=/tmp/mytpm1/swtpm-sock \
+        -tpmdev emulator,id=tpm0,chardev=chrtpm \
+        -device tpm-tis,tpmdev=tpm0 \
+        --nographic
+
+swtpm:
+    mkdir -p /tmp/mytpm1
+    swtpm socket --tpmstate dir=/tmp/mytpm1 \
+        --ctrl type=unixio,path=/tmp/mytpm1/swtpm-sock \
+        --tpm2 \
+        --log level=20
+
+hash:
+    pesign --hash -i {{ build_dir }}/EFI/BOOT/BOOTX64.EFI --digest-type sha256

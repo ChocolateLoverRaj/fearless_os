@@ -1,0 +1,8 @@
+[target.x86_64-unknown-none]
+rustflags = [
+    "-C", "link-arg=-Tlimine_x86_64.ld",
+    "-C", "relocation-model=static",
+]
+
+[target.x86_64-unknown-uefi]
+rustflags = ["--cfg", "sha2_backend=\"soft\""]
