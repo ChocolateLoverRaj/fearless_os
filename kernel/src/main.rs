@@ -6,3 +6,6 @@ mod limine_x86_64;
 
 #[cfg(target_os = "uefi")]
 mod uefi;
+
+#[cfg(target_arch = "aarch64")]
+mod aarch64;

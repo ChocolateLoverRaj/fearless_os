@@ -3,10 +3,30 @@
 version = 4
 
 [[package]]
+name = "aarch64-cpu"
+version = "11.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44171e22925ec72b63d86747bc3655c7849a5b8d865c980222128839f45ac034"
+dependencies = [
+ "tock-registers",
+]
+
+[[package]]
 name = "bit_field"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e4b40c7323adcfc0a41c4b88143ed58346ff65a288fc144329c5c45e05d70c6"
+
+[[package]]
+name = "bitbybit"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71d2a3353d70ac1091a33cbf31fc7e77b19091538a7e306e3740712af19807ca"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "bitflags"
@@ -82,12 +102,16 @@ dependencies = [
 name = "kernel"
 version = "0.1.0"
 dependencies = [
+ "aarch64-cpu",
+ "bitbybit",
  "hex-slice",
  "limine",
  "log",
  "sha2",
+ "spin",
  "uart_16550",
  "uefi",
+ "volatile 0.6.1",
  "x86_64",
 ]
 
@@ -165,6 +189,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "spin"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1527984ca054dfca79333baec451042863f485fbee01b7bf6d911de915cac865"
+
+[[package]]
 name = "syn"
 version = "2.0.118"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -174,6 +204,12 @@ dependencies = [
  "quote",
  "unicode-ident",
 ]
+
+[[package]]
+name = "tock-registers"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d2d250f87fb3fb6f225c907cf54381509f47b40b74b1d1f12d2dccbc915bdfe"
 
 [[package]]
 name = "typenum"
@@ -255,6 +291,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "442887c63f2c839b346c192d047a7c87e73d0689c9157b00b53dcc27dd5ea793"
 
 [[package]]
+name = "volatile"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af8ca9a5d4debca0633e697c88269395493cebf2e10db21ca2dbde37c1356452"
+dependencies = [
+ "volatile-macro",
+]
+
+[[package]]
+name = "volatile-macro"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65c67ce935f3b4329e473ecaff7bab444fcdc3d1d19f8bae61fabfa90b84f93e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "x86_64"
 version = "0.15.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -264,5 +320,5 @@ dependencies = [
  "bitflags",
  "const_fn",
  "rustversion",
- "volatile",
+ "volatile 0.4.6",
 ]

@@ -1,3 +1,6 @@
+[unstable]
+build-std = ["core"]
+
 [target.x86_64-unknown-none]
 rustflags = [
     "-C", "link-arg=-Tlimine_x86_64.ld",
@@ -6,3 +9,10 @@ rustflags = [
 
 [target.x86_64-unknown-uefi]
 rustflags = ["--cfg", "sha2_backend=\"soft\""]
+
+[target.aarch64-unknown-none-softfloat]
+rustflags = [
+    "-C", "link-arg=-Taarch64.ld",
+    "-C", "relocation-model=pie",
+    "-C", "link-arg=-pie"
+]
