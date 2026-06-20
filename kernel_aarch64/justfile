@@ -14,4 +14,6 @@ run accel='' release='' stop='' no_graphic='':
         --kernel {{ build_dir }}/{{ kernel_file_name }} \
         -s \
         {{ if stop == 'y' { '-S' } else { '' } }} \
-        {{ if no_graphic == 'y' { '--nographic --serial none --serial mon:stdio' } else { '' } }}
+        {{ if no_graphic == 'y' { '--nographic --serial none --serial mon:stdio' } else { '' } }} \
+        -d int \
+        -D {{ build_dir }}/qemu.log

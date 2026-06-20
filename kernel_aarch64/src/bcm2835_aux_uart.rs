@@ -39,6 +39,24 @@ struct Lsr {
     data_ready: bool,
 }
 
+#[bitfield(u32, debug)]
+struct Ier {
+    #[bit(0, rw)]
+    rx_enabled: bool,
+    #[bit(1, rw)]
+    tx_enabled: bool,
+}
+
+#[bitfield(u32, debug)]
+struct Iir {
+    #[bit(0, r)]
+    interrupt_not_pending: bool,
+    #[bit(1, r)]
+    tx: bool,
+    #[bit(2, r)]
+    rx: bool,
+}
+
 pub struct Bcm2835AuxUart {
     p: VolatileRef<'static, UartRegs>,
 }
@@ -55,9 +73,56 @@ impl Bcm2835AuxUart {
         while !Lsr::new_with_raw_value(self.p.as_mut_ptr().lsr().read()).transmitter_empty() {}
     }
 
-    pub fn read_sync(&mut self) -> u8 {
-        while !Lsr::new_with_raw_value(self.p.as_mut_ptr().lsr().read()).data_ready() {}
-        self.p.as_mut_ptr().io().read() as u8
+    pub fn try_read(&mut self) -> Option<u8> {
+        if Lsr::new_with_raw_value(self.p.as_mut_ptr().lsr().read()).data_ready() {
+            Some(self.p.as_mut_ptr().io().read() as u8)
+        } else {
+            None
+        }
+    }
+
+    pub fn read_blocking(&mut self) -> u8 {
+        loop {
+            if let Some(byte) = self.try_read() {
+                break byte;
+            }
+        }
+    }
+
+    pub fn interrupt_pending(&self) -> bool {
+        !Iir::new_with_raw_value(self.p.as_ptr().iir().read()).interrupt_not_pending()
+    }
+
+    pub fn rx_interrupt_pending(&self) -> bool {
+        Iir::new_with_raw_value(self.p.as_ptr().iir().read()).rx()
+    }
+
+    pub fn tx_interrupt_pending(&self) -> bool {
+        Iir::new_with_raw_value(self.p.as_ptr().iir().read()).tx()
+    }
+
+    pub fn rx_interrupt_enabled(&self) -> bool {
+        Ier::new_with_raw_value(self.p.as_ptr().ier().read()).rx_enabled()
+    }
+
+    pub fn tx_interrupt_enabled(&self) -> bool {
+        Ier::new_with_raw_value(self.p.as_ptr().ier().read()).tx_enabled()
+    }
+
+    pub fn set_rx_interrupt_enabled(&mut self, enabled: bool) {
+        self.p.as_mut_ptr().ier().update(|ier| {
+            let mut ier = Ier::new_with_raw_value(ier);
+            ier.set_rx_enabled(enabled);
+            ier.raw_value
+        });
+    }
+
+    pub fn set_tx_interrupt_enabled(&mut self, enabled: bool) {
+        self.p.as_mut_ptr().ier().update(|ier| {
+            let mut ier = Ier::new_with_raw_value(ier);
+            ier.set_tx_enabled(enabled);
+            ier.raw_value
+        });
     }
 }
 
