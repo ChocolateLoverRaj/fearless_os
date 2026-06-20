@@ -7,7 +7,8 @@
     "rust-analyzer": {
       "initialization_options": {
         "cargo": {
-          "target": "aarch64-unknown-none-softfloat",
+          // "target": "aarch64-unknown-none-softfloat",
+          "target": "riscv64gc-unknown-none-elf",
         },
       },
     },
