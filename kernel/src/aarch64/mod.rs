@@ -1,8 +1,4 @@
 #![cfg_attr(target_arch = "arm", feature(stdarch_arm_neon_intrinsics))]
-mod bcm2835_aux;
-mod bcm2835_aux_uart;
-mod bcm2836_armctrl_ic;
-mod bcm2836_l1_intc;
 mod logger;
 mod panic_handler;
 

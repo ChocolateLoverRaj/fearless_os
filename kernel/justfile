@@ -2,6 +2,7 @@ build_dir := "build"
 build_dir_x86_64 := build_dir + "/x86_64"
 build_dir_uefi := build_dir + "/uefi"
 build_dir_aarch64 := build_dir + "/aarch64"
+build_dir_arm := build_dir + "/arm"
 build_dir_riscv64 := build_dir + "/riscv"
 kernel_file_name := "kernel.img"
 
@@ -69,6 +70,54 @@ aarch64 accel='' release='' stop='' no_graphic='':
 [arg("accel", long="accel", short="a", value="y")]
 [arg("no_graphic", long="no-graphic", short="n", value="y")]
 [arg("release", long="release", short="r", value="y")]
+[arg("stop", long="stop", short="S", value="y")]
+raspi0 accel='' release='' stop='' no_graphic='':
+    mkdir -p {{ build_dir_arm }}
+    cargo objcopy --target armv6-none-eabihf {{ if release == 'y' { '--release' } else { '' } }} -- -O binary {{ build_dir_arm }}/{{ kernel_file_name }}
+    qemu-system-arm \
+        --machine raspi0,accel={{ if accel == 'y' { 'kvm:whpx:hvf:tcg' } else { 'tcg' } }} \
+        --no-reboot \
+        --kernel {{ build_dir_arm }}/{{ kernel_file_name }} \
+        -s \
+        {{ if stop == 'y' { '-S' } else { '' } }} \
+        {{ if no_graphic == 'y' { '--nographic --serial mon:stdio' } else { '' } }} \
+        -d int \
+        -D {{ build_dir_arm }}/qemu.log
+
+[arg("accel", long="accel", short="a", value="y")]
+[arg("no_graphic", long="no-graphic", short="n", value="y")]
+[arg("release", long="release", short="r", value="y")]
+[arg("stop", long="stop", short="S", value="y")]
+raspi1ap accel='' release='' stop='' no_graphic='':
+    mkdir -p {{ build_dir_arm }}
+    cargo objcopy --target armv6-none-eabihf {{ if release == 'y' { '--release' } else { '' } }} -- -O binary {{ build_dir_arm }}/{{ kernel_file_name }}
+    qemu-system-arm \
+        --machine raspi1ap,accel={{ if accel == 'y' { 'kvm:whpx:hvf:tcg' } else { 'tcg' } }} \
+        --no-reboot \
+        --kernel {{ build_dir_arm }}/{{ kernel_file_name }} \
+        -s \
+        {{ if stop == 'y' { '-S' } else { '' } }} \
+        {{ if no_graphic == 'y' { '--nographic --serial mon:stdio' } else { '' } }} \
+        -d int \
+        -D {{ build_dir_arm }}/qemu.log
+
+[arg("accel", long="accel", short="a", value="y")]
+[arg("no_graphic", long="no-graphic", short="n", value="y")]
+[arg("release", long="release", short="r", value="y")]
+[arg("stop", long="stop", short="S", value="y")]
+raspi2b accel='' release='' stop='' no_graphic='':
+    mkdir -p {{ build_dir_arm }}
+    cargo objcopy --target armv6-none-eabihf {{ if release == 'y' { '--release' } else { '' } }} -- -O binary {{ build_dir_arm }}/{{ kernel_file_name }}
+    qemu-system-arm \
+        --machine raspi2b,accel={{ if accel == 'y' { 'kvm:whpx:hvf:tcg' } else { 'tcg' } }} \
+        --no-reboot \
+        --kernel {{ build_dir_arm }}/{{ kernel_file_name }} \
+        -s \
+        {{ if stop == 'y' { '-S' } else { '' } }} \
+        {{ if no_graphic == 'y' { '--nographic --serial mon:stdio' } else { '' } }} \
+        -d int \
+        -D {{ build_dir_arm }}/qemu.log
+
 [arg("stop", long="stop", short="S", value="y")]
 riscv64 accel='' release='' stop='' no_graphic='':
     mkdir -p {{ build_dir_riscv64 }}

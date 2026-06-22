@@ -5,6 +5,10 @@ edition = "2024"
 publish = false
 
 [dependencies]
+arm-pl011-uart = "0.5.0"
+atags = "0.0.2"
+bitbybit = "2.0.0"
+volatile = { version = "0.6.1", features = ["derive"] }
 
 [target.'cfg(all(target_arch = "x86_64", target_os = "none"))'.dependencies]
 limine = "0.6.5"
@@ -19,10 +23,15 @@ uefi = { version = "0.37.0", features = ["logger", "panic_handler"] }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64-cpu = "11.2.0"
-bitbybit = "2.0.0"
 log = "0.4.32"
 spin = { version = "0.12.0", default-features = false, features = ["once", "spin_mutex"] }
-volatile = { version = "0.6.1", features = ["derive"] }
+
+[target.'cfg(target_arch = "arm")'.dependencies]
+aarch32-cpu = "0.3.0"
+atags = "0.0.2"
+fdt = "0.1.5"
+log = "0.4.32"
+spin = { version = "0.12.0", default-features = false, features = ["once", "spin_mutex"] }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 arbitrary-int = "2.1.1"

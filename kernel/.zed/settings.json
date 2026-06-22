@@ -8,7 +8,9 @@
       "initialization_options": {
         "cargo": {
           // "target": "aarch64-unknown-none-softfloat",
-          "target": "riscv64gc-unknown-none-elf",
+          // "target": "riscv64gc-unknown-none-elf",
+          "target": "armv6-none-eabihf",
+          // "target": "armv7a-none-eabihf",
         },
       },
     },
