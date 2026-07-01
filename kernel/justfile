@@ -119,6 +119,7 @@ raspi2b accel='' release='' stop='' no_graphic='':
         -D {{ build_dir_arm }}/qemu.log
 
 [arg("stop", long="stop", short="S", value="y")]
+[arg("no_graphic", long="no-graphic", short="n", value="y")]
 riscv64 accel='' release='' stop='' no_graphic='':
     mkdir -p {{ build_dir_riscv64 }}
     cargo objcopy --target riscv64gc-unknown-none-elf {{ if release == 'y' { '--release' } else { '' } }} -- -O binary {{ build_dir_riscv64 }}/{{ kernel_file_name }}

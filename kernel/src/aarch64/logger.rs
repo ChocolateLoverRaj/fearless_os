@@ -4,7 +4,7 @@ use aarch64_cpu::registers::{DAIF, ReadWriteable, Readable, Writeable};
 use log::max_level;
 use spin::{Mutex, Once};
 
-use super::bcm2835_aux_uart::Bcm2835AuxUart;
+use crate::bcm2835_aux_uart::Bcm2835AuxUart;
 
 struct Logger {
     uart: Mutex<Bcm2835AuxUart>,
