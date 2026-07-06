@@ -54,6 +54,8 @@
               lldb
               swtpm
               pesign
+              nasm
+              parted
             ];
           };
       }

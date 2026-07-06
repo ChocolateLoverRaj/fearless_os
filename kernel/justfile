@@ -5,6 +5,7 @@ build_dir_aarch64 := build_dir + "/aarch64"
 build_dir_arm := build_dir + "/arm"
 build_dir_riscv64 := build_dir + "/riscv"
 kernel_file_name := "kernel.img"
+build_dir_bios := build_dir + "/bios"
 
 [arg("accel", long="accel", short="a", value="y")]
 [arg("no_graphic", long="no-graphic", short="n", value="y")]
@@ -118,8 +119,8 @@ raspi2b accel='' release='' stop='' no_graphic='':
         -d int \
         -D {{ build_dir_arm }}/qemu.log
 
-[arg("stop", long="stop", short="S", value="y")]
 [arg("no_graphic", long="no-graphic", short="n", value="y")]
+[arg("stop", long="stop", short="S", value="y")]
 riscv64 accel='' release='' stop='' no_graphic='':
     mkdir -p {{ build_dir_riscv64 }}
     cargo objcopy --target riscv64gc-unknown-none-elf {{ if release == 'y' { '--release' } else { '' } }} -- -O binary {{ build_dir_riscv64 }}/{{ kernel_file_name }}
@@ -137,3 +138,56 @@ dtb:
     qemu-system-riscv64 --machine virt,dumpdtb={{ build_dir_riscv64 }}/virt.dtb \
         --smp 4
     dtc -I dtb -O dts -o {{ build_dir_riscv64 }}/virt.dts {{ build_dir_riscv64 }}/virt.dtb
+
+build_bios:
+    mkdir -p {{ build_dir_bios }}
+
+    # Create the disk file
+    truncate -s 33M {{ build_dir_bios }}/disk.img
+
+    # Format the disk as GPT with a FAT32 partition
+    parted {{ build_dir_bios }}/disk.img --script \
+      mklabel gpt \
+      mkpart "BOOT" fat32 1MiB 100% \
+      set 1 legacy_boot on
+
+    # Install the BIOS code that goes in the protective MBR
+    nasm -f bin stage0.S -o {{ build_dir_bios }}/stage0.bin
+    nasm -f bin stage1.S -o {{ build_dir_bios }}/stage1.bin -DSTAGE_0_SIZE=$(stat -c %s {{ build_dir_bios }}/stage0.bin)
+    cat {{ build_dir_bios }}/stage0.bin {{ build_dir_bios }}/stage1.bin > {{ build_dir_bios }}/mbr.bin
+    @test $(stat -c %s {{ build_dir_bios }}/mbr.bin) -le 440 \
+            || (echo "mbr.bin exceeds 440 bytes" && exit 1)
+    dd if={{ build_dir_bios }}/mbr.bin of={{ build_dir_bios }}/disk.img bs=440 conv=notrunc
+
+    # Format the FAT32 partition
+    mformat -i {{ build_dir_bios }}/disk.img@@1M -H 2048 -T 65503 -F -v BOOT ::
+
+    # Install the BIOS code that goes into the FAT32's BIOS boot section
+    nasm -f bin bios_fat32_0.S -o {{ build_dir_bios }}/bios_fat32_0.bin
+    @test $(stat -c %s {{ build_dir_bios }}/bios_fat32_0.bin) -le 3 \
+            || (echo "bios_fat32_0.bin exceeds 3 bytes" && exit 1)
+    nasm -f bin bios_fat32_1.S -o {{ build_dir_bios }}/bios_fat32_1.bin
+    @test $(stat -c %s {{ build_dir_bios }}/bios_fat32_1.bin) -le 420 \
+            || (echo "bios_fat32_1.bin exceeds 420 bytes" && exit 1)
+    dd if={{ build_dir_bios }}/bios_fat32_0.bin of={{ build_dir_bios }}/disk.img bs=1M seek=1 conv=notrunc
+    dd if={{ build_dir_bios }}/bios_fat32_1.bin of={{ build_dir_bios }}/disk.img bs=1 seek=1048666 conv=notrunc
+
+    # Add the BIOS boot file
+    nasm -f bin boot.S -o {{ build_dir_bios }}/BOOT.BIN
+    mcopy -i {{ build_dir_bios }}/disk.img@@1M {{ build_dir_bios }}/BOOT.BIN ::
+
+bios: build_bios
+    qemu-system-x86_64 \
+        --machine q35,accel=kvm:whpx:hvf:tcg \
+        --no-reboot \
+        --nographic \
+        -drive file={{ build_dir_bios }}/disk.img,format=raw,if=ide,snapshot=on \
+        -d int,cpu_reset,guest_errors \
+        -D {{ build_dir_bios }}/qemu.log
+
+bios_q35: build_bios
+    qemu-system-x86_64 \
+       --machine q35,accel=kvm:whpx:hvf:tcg \
+       --no-reboot \
+       --nographic \
+       -drive file={{ build_dir_bios }}/disk.img,format=raw,if=ide,snapshot=on
