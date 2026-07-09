@@ -143,7 +143,9 @@ build_bios:
     mkdir -p {{ build_dir_bios }}
 
     # Create the disk file
-    truncate -s 33M {{ build_dir_bios }}/disk.img
+    # We need 33 MiB minimum to create a minimum sized FAT32 partition within it
+    # We are using 65 MiB to create a larger FAT32 partition which will have 2 sectors per cluster for testing
+    truncate -s 65M {{ build_dir_bios }}/disk.img
 
     # Format the disk as GPT with a FAT32 partition
     parted {{ build_dir_bios }}/disk.img --script \
@@ -160,7 +162,12 @@ build_bios:
     dd if={{ build_dir_bios }}/mbr.bin of={{ build_dir_bios }}/disk.img bs=440 conv=notrunc
 
     # Format the FAT32 partition
-    mformat -i {{ build_dir_bios }}/disk.img@@1M -H 2048 -T 65503 -F -v BOOT ::
+    # 2 sectors per cluster to test our loading code
+    # 2048 hidden sectors, because our FAT32 partition starts at sector 2048
+    # Size of FAT32 partition, in sectors
+    # Format at FAT32
+    # Label it as "BOOT"
+    mformat -i {{ build_dir_bios }}/disk.img@@1M -c 2 -H 2048 -T 131039 -F -v BOOT ::
 
     # Install the BIOS code that goes into the FAT32's BIOS boot section
     nasm -f bin bios_fat32_0.S -o {{ build_dir_bios }}/bios_fat32_0.bin
@@ -174,6 +181,16 @@ build_bios:
 
     # Add the BIOS boot file
     nasm -f bin boot.S -o {{ build_dir_bios }}/BOOT.BIN
+    # 512 B in a sector
+    # 32 B per entry
+    # 16 entries per sector
+    # One entry for volume ID before BOOT.BIN
+    # Create extra entries before the BOOT.BIN entry to test our loader searching further
+    # Add 15 items to make BOOT.BIN get placed in sector 1 of the cluster
+    # Add 31 items to make BOOT.BIN get placed in cluster 1 of the file
+    for i in {0..30}; do mcopy -i {{ build_dir_bios }}/disk.img@@1M /dev/null ::TEST_$i; done
+    # Add a dir to create a gap between the first and second root dir clusters
+    mmd -i {{ build_dir_bios }}/disk.img@@1M ::TEST_DIR
     mcopy -i {{ build_dir_bios }}/disk.img@@1M {{ build_dir_bios }}/BOOT.BIN ::
 
 bios: build_bios
