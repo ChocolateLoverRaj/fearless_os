@@ -167,7 +167,7 @@ build_bios:
     # Size of FAT32 partition, in sectors
     # Format at FAT32
     # Label it as "BOOT"
-    mformat -i {{ build_dir_bios }}/disk.img@@1M -c 2 -H 2048 -T 131039 -F -v BOOT ::
+    mformat -i {{ build_dir_bios }}/disk.img@@1M -c 2 -H 2048 -T 131039 -F -v BOOT -R 100 -K 1 ::
 
     # Install the BIOS code that goes into the FAT32's BIOS boot section
     nasm -f bin bios_fat32_0.S -o {{ build_dir_bios }}/bios_fat32_0.bin
@@ -187,10 +187,13 @@ build_bios:
     # One entry for volume ID before BOOT.BIN
     # Create extra entries before the BOOT.BIN entry to test our loader searching further
     # Add 15 items to make BOOT.BIN get placed in sector 1 of the cluster
-    # Add 31 items to make BOOT.BIN get placed in cluster 1 of the file
-    for i in {0..301}; do mcopy -i {{ build_dir_bios }}/disk.img@@1M /dev/null ::TEST_$i; done
+    # Add 31 items to make BOOT.BIN get placed in cluster 1 of the root dir
+    # Add 63 items to make BOOT.BIN get placed in cluster 2 of the root dir
+    for i in {0..61}; do mcopy -i {{ build_dir_bios }}/disk.img@@1M /dev/null ::TEST_$i; done
     # Add a dir to create a gap between the first and second root dir clusters
     mmd -i {{ build_dir_bios }}/disk.img@@1M ::TEST_DIR
+    # Note that mdir will allocate cluster(s) to the file before creating the dir entry
+    # This means that the file cluster could be before the dir entry
     mcopy -i {{ build_dir_bios }}/disk.img@@1M {{ build_dir_bios }}/BOOT.BIN ::
 
 bios: build_bios
