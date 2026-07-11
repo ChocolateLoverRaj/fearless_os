@@ -188,7 +188,7 @@ build_bios:
     # Create extra entries before the BOOT.BIN entry to test our loader searching further
     # Add 15 items to make BOOT.BIN get placed in sector 1 of the cluster
     # Add 31 items to make BOOT.BIN get placed in cluster 1 of the file
-    for i in {0..30}; do mcopy -i {{ build_dir_bios }}/disk.img@@1M /dev/null ::TEST_$i; done
+    for i in {0..301}; do mcopy -i {{ build_dir_bios }}/disk.img@@1M /dev/null ::TEST_$i; done
     # Add a dir to create a gap between the first and second root dir clusters
     mmd -i {{ build_dir_bios }}/disk.img@@1M ::TEST_DIR
     mcopy -i {{ build_dir_bios }}/disk.img@@1M {{ build_dir_bios }}/BOOT.BIN ::
