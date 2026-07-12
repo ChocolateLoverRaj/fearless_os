@@ -198,7 +198,7 @@ build_bios:
 
 bios: build_bios
     qemu-system-x86_64 \
-        --machine q35,accel=kvm:whpx:hvf:tcg \
+        --machine pc,accel=kvm:whpx:hvf:tcg \
         --no-reboot \
         --nographic \
         -drive file={{ build_dir_bios }}/disk.img,format=raw,if=ide,snapshot=on \
@@ -211,3 +211,16 @@ bios_q35: build_bios
        --no-reboot \
        --nographic \
        -drive file={{ build_dir_bios }}/disk.img,format=raw,if=ide,snapshot=on
+
+bios_2:
+    mkdir -p {{ build_dir_bios }}
+    nasm -f bin bios/boot.S -o {{ build_dir_bios }}/boot.bin
+    cp {{ build_dir_bios }}/boot.bin {{ build_dir_bios }}/disk.img
+    truncate -s %1M {{ build_dir_bios }}/disk.img
+    qemu-system-x86_64 \
+        --machine q35,accel=kvm:whpx:hvf:tcg \
+        --no-reboot \
+        --nographic \
+        -drive file={{ build_dir_bios }}/disk.img,format=raw,if=ide,snapshot=on \
+        -d int,cpu_reset,guest_errors \
+        -D {{ build_dir_bios }}/qemu.log
