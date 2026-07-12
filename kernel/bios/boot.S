@@ -7,160 +7,167 @@ IDT:
     .Base         dd 0
 
 Start:
-    ; Some BIOS' may load us at 0x0000:0x7C00 while other may load us at 0x07C0:0x0000.
-    ; Do a far jump to fix this issue, and reload CS to 0x0000.
-    jmp 0x0000:.Next
+        ; Some BIOS' may load us at 0x0000:0x7C00 while other may load us at 0x07C0:0x0000.
+        ; Do a far jump to fix this issue, and reload CS to 0x0000.
+        jmp 0x0000:AfterReloadCs
 
-.Next:
-    ; ax = 0
-    xor ax, ax
-    ; ss = 0
-    mov ss, ax
-    ; Set up stack so that it starts below where we are loadedj.
-    mov sp, Start
-    ; make ds, es, fs, gs = 0
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    ; clear the direction flag
-    cld
+AfterReloadCs:
+        ; ax = 0
+        xor ax, ax
+        ; ss = 0
+        mov ss, ax
+        ; Set up stack so that it starts below where we are loadedj.
+        mov sp, Start
+        ; make ds, es, fs, gs = 0
+        mov ds, ax
+        mov es, ax
+        mov fs, ax
+        mov gs, ax
+        ; clear the direction flag
+        cld
 
-    ; Get memory
-    xor ebx, ebx
-.GetMemoryMap:
-    mov di, .MemoryMapBuffer
-    mov edx, 0x534D4150
-    mov eax, 0xE820
-    mov ecx, 24
-    int 0x15
-    jc .ErrorCheckingMemory
-    cmp eax, 0x0534D4150
-    jc .ErrorCheckingMemory
+        ; Get memory
+        xor ebx, ebx
+    .GetMemoryMap:
+        mov di, MemoryMapBuffer
+        mov edx, 0x534D4150
+        mov eax, 0xE820
+        mov ecx, 24
+        int 0x15
+        jc .ErrorCheckingMemory
+        cmp eax, 0x0534D4150
+        jc .ErrorCheckingMemory
 
-    mov si, GotEntry
-    call Print
+        mov si, GotEntry
+        call Print
 
-    ; Check if it's free memory
-    mov eax, [.MemoryMapBuffer + 0x10]
-    cmp eax, 0x1
-    jne .MaybeLoop
+        ; Check if it's free memory
+        mov eax, [MemoryMapBuffer + 0x10]
+        cmp eax, 0x1
+        jne .MaybeLoop
 
-    ; Check if it's >4 GiB
-    mov eax, [.MemoryMapBuffer + 0x14]
-    test eax, eax
-    ; If it is, we don't care if it's the largest, 4 GiB is enough
-    jz .CompareLenLower32
-    ; Make it so we don't continue looping
-    xor ebx, ebx
-    jmp .UpdateLargest
+        ; Check if it's >4 GiB
+        mov eax, [MemoryMapBuffer + 0x14]
+        test eax, eax
+        ; If it is, we don't care if it's the largest, 4 GiB is enough
+        jz .CompareLenLower32
+        ; Make it so we don't continue looping
+        xor ebx, ebx
+        jmp .UpdateLargest
 
-.CompareLenLower32:
-    ; Check if it's more than the existing
-    mov eax, [.MemoryMapBuffer + 0x8]
-    cmp eax, [.LargestFreeMemLen]
-    jb .MaybeLoop
+    .CompareLenLower32:
+        ; Check if it's more than the existing
+        mov eax, [MemoryMapBuffer + 0x8]
+        cmp eax, [LargestFreeMemLen]
+        jb .MaybeLoop
 
-.UpdateLargest:
-    ; Set source ptr
-    mov si, .MemoryMapBuffer
-    ; Set dest ptr
-    mov di, .LargestFreeMemStart
-    ; Do the thing 4 times
-    mov cx, 4
-    ; Copy a u32 from src to dest and advance both src and dest ptrs, <cx> times
-    rep movsd
+    .UpdateLargest:
+        ; Set source ptr
+        mov si, MemoryMapBuffer
+        ; Set dest ptr
+        mov di, LargestFreeMemStart
+        ; Do the thing 4 times
+        mov cx, 4
+        ; Copy a u32 from src to dest and advance both src and dest ptrs, <cx> times
+        rep movsd
 
-.MaybeLoop:
-    ; If ebx is 0, stop searching
-    test ebx, ebx
-    jnz .GetMemoryMap
+    .MaybeLoop:
+        ; If ebx is 0, stop searching
+        test ebx, ebx
+        jnz .GetMemoryMap
+        jmp .Done
 
-.NoMoreMemory:
-    ; Check whether we support Long Mode or not.
-    ; Check whether CPUID is supported or not.
-    ; It's supported, bit 0x200000 can be changed
-    ; This original one will be preserved
-    pushfd
-    ; This one is just to pop immediately
-    pushfd
-    ; Toggle the bit
-    xor dword [esp], 0x200000
-    popfd
-    ; Read it back and see if it's still there
-    pushfd
-    pop eax
-    ; See which bits changed
-    xor eax, [esp]
-    ; Restore original eflags
-    popfd
-    ; If the bit changed, that means CPUID is supported
-    test eax, 0x200000
-    jz .NoCpuId
+    .ErrorCheckingMemory:
+        jmp $
 
-    ; CpuId is supported.
-    ; Use this CPUID to check the highest CPUID function implemented
-    mov eax, 0x80000000
-    cpuid
-    ; We need the function 0x80000001, so the highest must be at least this
-    cmp eax, 0x80000001
-    jb .NoExtendedFunction
-    ; Get feature flags
-    mov eax, 0x80000001
-    cpuid
-    ; Bit 29 is long mode
-    test edx, 1 << 29
-    jz .NoLongMode
+    .Done:
 
-    ; Long mode is supported.
-    mov     ax, 0x2403              ; Query A20 gate support
-    int     0x15
-    jc      .a20_ns                  ; INT 0x15 is not supported
-    test    ah, ah
-    jnz     .a20_ns                  ; INT 0x15 is not supported
+CheckLongMode:
+        ; Check whether we support Long Mode or not.
+        ; Check whether CPUID is supported or not.
+        ; It's supported, bit 0x200000 can be changed
+        ; This original one will be preserved
+        pushfd
+        ; This one is just to pop immediately
+        pushfd
+        ; Toggle the bit
+        xor dword [esp], 0x200000
+        popfd
+        ; Read it back and see if it's still there
+        pushfd
+        pop eax
+        ; See which bits changed
+        xor eax, [esp]
+        ; Restore original eflags
+        popfd
+        ; If the bit changed, that means CPUID is supported
+        test eax, 0x200000
+        jz .NoCpuId
 
-    mov     ax, 0x2402              ; Get A20 gate status
-    int     0x15
-    jc      .a20_failed              ; Couldn't get status
-    test    ah, ah
-    jnz     .a20_failed              ; Couldn't get status
-    test    al, al
-    jnz     .a20_activated           ; AL = 1, A20 gate is already activated
+        ; CpuId is supported.
+        ; Use this CPUID to check the highest CPUID function implemented
+        mov eax, 0x80000000
+        cpuid
+        ; We need the function 0x80000001, so the highest must be at least this
+        cmp eax, 0x80000001
+        jb .NoExtendedFunction
+        ; Get feature flags
+        mov eax, 0x80000001
+        cpuid
+        ; Bit 29 is long mode
+        test edx, 1 << 29
+        jz .NoLongMode
+        jmp .LongModeSupported
 
-    mov     ax, 0x2401              ; Activate A20 gate
-    int     0x15
-    jc      .a20_failed              ; Couldn't activate the gate
-    test    ah, ah
-    jnz     .a20_failed              ; Couldn't activate the gate
+    .NoCpuId:
+        jmp $
 
-.a20_activated:                  ; Go on
-    jmp $
+    .NoExtendedFunction:
+        jmp $
 
-.a20_ns:
-    jmp $
+    .NoLongMode:
+        jmp $
 
-.a20_failed:
-    jmp $
+    .LongModeSupported:
 
-.ErrorCheckingMemory:
-    jmp $
+EnableA20:
+        mov     ax, 0x2403              ; Query A20 gate support
+        int     0x15
+        jc      .NotSupported                  ; INT 0x15 is not supported
+        test    ah, ah
+        jnz     .NotSupported                  ; INT 0x15 is not supported
 
-.NoCpuId:
-    jmp $
+        mov     ax, 0x2402              ; Get A20 gate status
+        int     0x15
+        jc      .Failed              ; Couldn't get status
+        test    ah, ah
+        jnz     .Failed              ; Couldn't get status
+        test    al, al
+        jnz     .Activated           ; AL = 1, A20 gate is already activated
 
-.NoExtendedFunction:
-    jmp $
+        mov     ax, 0x2401              ; Activate A20 gate
+        int     0x15
+        jc      .Failed              ; Couldn't activate the gate
+        test    ah, ah
+        jnz     .Failed              ; Couldn't activate the gate
+        jmp .Activated
 
-.NoLongMode:
-    jmp $
+    .NotSupported:
+        jmp $
+
+    .Failed:
+        jmp $
+
+    .Activated:
+        jmp $
 
 ALIGN 8
-.MemoryMapBuffer:
+MemoryMapBuffer:
     times 24 db 0
 
-.LargestFreeMemStart:
+LargestFreeMemStart:
     times 8 db 0
-.LargestFreeMemLen:
+LargestFreeMemLen:
     times 8 db 0
 
 Print:
