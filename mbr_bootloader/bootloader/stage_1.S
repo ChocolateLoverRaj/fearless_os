@@ -18,8 +18,8 @@ start:
     and cx, 0x4
     jz error_edd_not_present
 
-    ; Read MBR partition 1
-    mov al, [MBR_ADDR + 0x1BE]
+    ; Read MBR partition 1 -> partition type
+    mov al, [MBR_ADDR + 0x1C2]
     cmp al, 0xEE
     jne error_not_gpt
 
