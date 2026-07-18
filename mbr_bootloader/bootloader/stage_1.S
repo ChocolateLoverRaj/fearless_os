@@ -2,6 +2,8 @@ BITS 16
 ; STAGE_0_SIZE will be passed from the code that calls `nasm`
 ORG 0x7A00 + STAGE_0_SIZE
 
+MBR_ADDR equ 0x7A00
+
 start:
     ; Set stack pointer right below where we are copied
     mov sp, 0x7A00
@@ -15,6 +17,11 @@ start:
     jne error_extensions_not_present
     and cx, 0x4
     jz error_edd_not_present
+
+    ; Read MBR partition 1
+    mov al, [MBR_ADDR + 0x1BE]
+    cmp al, 0xEE
+    jne error_not_gpt
 
     ; Read sector 1
     mov si, msg_reading_gpt_header
@@ -54,10 +61,12 @@ start:
     jc error_read_entries
 
     ; Read the first partition entry
+    ; TODO: check all partition entries
     mov si, msg_reading_partition
     call print
+    mov ah, [PARTITIONS_ADDR + 0x30]
     ; Check for bit 2 which means BIOS bootable
-    test byte [PARTITIONS_ADDR + 0x30], 0x4
+    test ah, 0x4
     ; If bit 2 isn't there, don't do anything
     jz not_bios_bootable
 
@@ -85,6 +94,11 @@ start:
     ; jc error
     ; Store bytes per sector in ax
     ; mov ax, [buffer + 24]
+
+error_not_gpt:
+    mov si, msg_err_not_gpt
+    call print
+    jmp $
 
 error_checking_extensions:
     mov si, msg_check
@@ -129,13 +143,22 @@ msg_reading_gpt_partitions db "P", 0x0D, 0x0A, 0
 msg_reading_partition db "A", 0x0D, 0x0A, 0
 msg_jumping_to_partition db "J", 0x0D, 0x0A, 0
 
+; Error EDD not present
 msg_edd         db "ED", 0x0D, 0x0A, 0
+; Error extensions not present
 msg_ext         db "EE", 0x0D, 0x0A, 0
+; Error checking extensions
 msg_check       db "EC", 0x0D, 0x0A, 0
+; Error reading sector 1
 msg_read1       db "EG", 0x0D, 0x0A, 0
+; Error reading entries
 msg_entries     db "EP", 0x0D, 0x0A, 0
+; Error reading Partition
 msg_part        db "EA", 0x0D, 0x0A, 0
+; Partition not BIOS bootable
 msg_bootflag    db "EN", 0x0D, 0x0A, 0
+; Not a GPT disk
+msg_err_not_gpt db "EP", 0x0D, 0x0A, 0
 
 print:
     lodsb

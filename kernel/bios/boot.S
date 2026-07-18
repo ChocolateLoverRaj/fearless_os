@@ -159,7 +159,8 @@ EnableA20:
         jmp $
 
     .Activated:
-        jmp $
+
+SetupPageTables:
 
 ALIGN 8
 MemoryMapBuffer:
