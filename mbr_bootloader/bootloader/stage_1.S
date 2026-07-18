@@ -72,10 +72,10 @@ start:
 
     ; Read the first sector of the partition
     ; Reuse the buffer
-    mov eax, [PARTITIONS_ADDR + 0x20]
-    mov [buffer + 8], eax
-    mov eax, [PARTITIONS_ADDR + 0x24]
-    mov [buffer + 12], eax
+    mov ebx, [PARTITIONS_ADDR + 0x20]
+    mov [buffer + 8], ebx
+    mov ecx, [PARTITIONS_ADDR + 0x24]
+    mov [buffer + 12], ecx
     mov si, buffer
     mov ah, 0x42
     int 0x13
@@ -84,6 +84,10 @@ start:
     ; Jump to the partition's BIOS code
     mov si, msg_jumping_to_partition
     call print
+    ; Set magic
+    ; MAGIC will be passed as an input to nasm
+    mov eax, MAGIC
+    ; ebx and ecx are from before
     jmp 0x7C00
 
     ; Read sector size

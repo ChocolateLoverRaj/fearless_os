@@ -57,6 +57,7 @@
               nasm
               parted
               gptfdisk
+              gnumake
             ];
           };
       }
