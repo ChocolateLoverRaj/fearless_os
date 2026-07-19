@@ -48,38 +48,67 @@ start:
 
     ; Read starting LBA of the entries
     ; Reuse the buffer
-    mov si, msg_reading_gpt_partitions
-    call print
-    PARTITIONS_ADDR equ SECTOR_1_ADDR
-    mov eax, [SECTOR_1_ADDR + 0x48]
-    mov [buffer + 8], eax
-    mov eax, [SECTOR_1_ADDR + 0x4C]
-    mov [buffer + 12], eax
-    mov si, buffer
-    mov ah, 0x42
-    int 0x13
-    jc error_read_entries
+    mov si, SECTOR_1_ADDR + 0x48
+    mov di, buffer + 0x8
+    mov cx, 4
+    rep movsw
 
-    ; Read the first partition entry
-    ; TODO: check all partition entries
-    mov si, msg_reading_partition
-    call print
-    mov ah, [PARTITIONS_ADDR + 0x30]
-    ; Check for bit 2 which means BIOS bootable
-    test ah, 0x4
-    ; If bit 2 isn't there, don't do anything
-    jz not_bios_bootable
+    .read_entries_sector:
+        mov si, msg_reading_gpt_partitions
+        call print
+        PARTITIONS_ADDR equ SECTOR_1_ADDR
+        mov si, buffer
+        mov ah, 0x42
+        int 0x13
+        jc error_read_entries
 
-    ; Read the first sector of the partition
-    ; Reuse the buffer
-    mov ebx, [PARTITIONS_ADDR + 0x20]
-    mov [buffer + 8], ebx
-    mov ecx, [PARTITIONS_ADDR + 0x24]
-    mov [buffer + 12], ecx
-    mov si, buffer
-    mov ah, 0x42
-    int 0x13
-    jc error_read_partition
+        ; Use ebx to keep track of offset within sector
+        xor ebx, ebx
+        xor edi, edi
+    .read_entry:
+        mov cx, 4
+        mov esi, PARTITIONS_ADDR
+        add esi, ebx
+    .check_if_zero:
+        lodsd
+        or edi, eax
+        loop .check_if_zero
+        ; If edi is zero, all 16 bytes were zero and this entry is empty
+        jz .next
+
+        mov ah, [PARTITIONS_ADDR + ebx + 0x30]
+        ; Check for bit 2 which means BIOS bootable
+        test ah, 0x4
+        ; If bit 2 isn't there, don't do anything
+        jnz .boot_partition
+    .next:
+        add ebx, 128
+        cmp ebx, 512
+        jl .read_entry
+        ; Check if this is the last one
+        mov si, buffer + 0x8
+        mov di, SECTOR_1_ADDR + 0x30
+        mov cx, 4
+        repe cmpsw
+        je no_bootable_partition
+        add dword [buffer + 0x8], 1
+        adc dword [buffer + 0xC], 0
+        jmp .read_entries_sector
+
+    .boot_partition:
+        mov si, msg_reading_partition
+        call print
+        ; Read the first sector of the partition
+        ; Reuse the buffer
+        mov esi, PARTITIONS_ADDR + 0x20
+        add esi, ebx
+        mov di, buffer + 0x8
+        mov cx, 4
+        rep movsw
+        mov si, buffer
+        mov ah, 0x42
+        int 0x13
+        jc error_read_partition
 
     ; Jump to the partition's BIOS code
     mov si, msg_jumping_to_partition
@@ -87,7 +116,8 @@ start:
     ; Set magic
     ; MAGIC will be passed as an input to nasm
     mov eax, MAGIC
-    ; ebx and ecx are from before
+    mov ebx, [buffer + 0x8]
+    mov ecx, [buffer + 0xC]
     jmp 0x7C00
 
     ; Read sector size
@@ -101,41 +131,36 @@ start:
 
 error_not_gpt:
     mov si, msg_err_not_gpt
-    call print
-    jmp $
+    jmp error
 
 error_checking_extensions:
     mov si, msg_check
-    call print
-    jmp $
+    jmp error
 
 error_extensions_not_present:
     mov si, msg_ext
-    call print
-    jmp $
+    jmp error
 
 error_edd_not_present:
     mov si, msg_edd
-    call print
-    jmp $
+    jmp error
 
 error_read_sector_1:
     mov si, msg_read1
-    call print
-    jmp $
+    jmp error
 
 error_read_entries:
     mov si, msg_entries
-    call print
-    jmp $
+    jmp error
 
 error_read_partition:
     mov si, msg_part
-    call print
-    jmp $
+    jmp error
 
-not_bios_bootable:
+no_bootable_partition:
     mov si, msg_bootflag
+; must set si to error message before this
+error:
     call print
     jmp $
 
@@ -148,21 +173,21 @@ msg_reading_partition db "A", 0x0D, 0x0A, 0
 msg_jumping_to_partition db "J", 0x0D, 0x0A, 0
 
 ; Error EDD not present
-msg_edd         db "ED", 0x0D, 0x0A, 0
+msg_edd         db "D", 0
 ; Error extensions not present
-msg_ext         db "EE", 0x0D, 0x0A, 0
+msg_ext         db "E", 0
 ; Error checking extensions
-msg_check       db "EC", 0x0D, 0x0A, 0
+msg_check       db "C", 0
 ; Error reading sector 1
-msg_read1       db "EG", 0x0D, 0x0A, 0
+msg_read1       db "1", 0
 ; Error reading entries
-msg_entries     db "EP", 0x0D, 0x0A, 0
+msg_entries     db "N", 0
 ; Error reading Partition
-msg_part        db "EA", 0x0D, 0x0A, 0
-; Partition not BIOS bootable
-msg_bootflag    db "EN", 0x0D, 0x0A, 0
+msg_part        db "R", 0
+; No bootable partition
+msg_bootflag    db "0", 0
 ; Not a GPT disk
-msg_err_not_gpt db "EP", 0x0D, 0x0A, 0
+msg_err_not_gpt db "L", 0
 
 print:
     lodsb

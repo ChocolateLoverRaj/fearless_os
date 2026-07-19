@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 gpt = "4.1.0"
+gptman = "3.1.1"

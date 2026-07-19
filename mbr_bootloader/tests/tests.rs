@@ -52,3 +52,8 @@ fn boots_gpt_small() {
 fn boots_gpt_large() {
     test_img("gpt_large.img", 0x1FFFFFFDE);
 }
+
+#[test]
+fn boots_gpt_last_entry() {
+    test_img("gpt_last_entry.img", 0x22);
+}

@@ -26,7 +26,10 @@ $(BUILD_DIR)/gpt.img: src/bin/build_test_img.rs $(BUILD_DIR)/bootloader.bin $(BU
 $(BUILD_DIR)/gpt_large.img: src/bin/build_test_img_large.rs $(BUILD_DIR)/bootloader.bin $(BUILD_DIR)/test.bin $(COMMON_DEPS) | $(BUILD_DIR)
 	cargo run --bin build_test_img_large
 
-test: $(BUILD_DIR)/gpt.img $(BUILD_DIR)/gpt_large.img
+$(BUILD_DIR)/gpt_last_entry.img: src/bin/build_test_img_last_entry.rs $(BUILD_DIR)/bootloader.bin $(BUILD_DIR)/test.bin $(COMMON_DEPS) | $(BUILD_DIR)
+	cargo run --bin build_test_img_last_entry
+
+test: $(BUILD_DIR)/gpt.img $(BUILD_DIR)/gpt_large.img $(BUILD_DIR)/gpt_last_entry.img
 	cargo test
 
 clean:
