@@ -1,14 +1,21 @@
 use std::{
     fs::{self, OpenOptions},
     io::{Seek, SeekFrom, Write},
-    os::unix::fs::FileExt,
 };
+
+use mbrman::{BOOT_INACTIVE, CHS, MBRPartitionEntry};
 
 pub const MAGIC: u32 = 0xA786B9FC;
 pub const DEBUG_EXIT_VALUE: u8 = 0x10;
 
-/// Partition index starts at 1 and last valid one is 128
-pub fn build_test_image(name: &str, disk_size: u64, gpt_partition_index: u32) {
+/// Valid MBR partition indexes: 1..=4.
+/// Valid GPT partition indexes: 1..=128.
+pub fn build_test_image(
+    name: &str,
+    disk_size: u64,
+    mbr_partition_index: usize,
+    gpt_partition_index: u32,
+) {
     let mut file = OpenOptions::new()
         .create(true)
         .read(true)
@@ -17,9 +24,18 @@ pub fn build_test_image(name: &str, disk_size: u64, gpt_partition_index: u32) {
         .open(format!("build/{name}.img"))
         .unwrap();
     file.set_len(disk_size).unwrap();
-    file.write_all_at(&fs::read("build/bootloader.bin").unwrap(), 0)
-        .unwrap();
-    gptman::GPT::write_protective_mbr_into(&mut file, 512).unwrap();
+    let mut mbr = mbrman::MBR::new_from(&mut file, 512, [0xf4, 0x12, 0xd9, 0xd5]).unwrap();
+    let bootloader = fs::read("build/bootloader.bin").unwrap();
+    mbr.header.bootstrap_code[..bootloader.len()].copy_from_slice(&bootloader);
+    mbr[mbr_partition_index] = MBRPartitionEntry {
+        boot: BOOT_INACTIVE,
+        first_chs: CHS::empty(),
+        last_chs: CHS::empty(),
+        starting_lba: 1,
+        sectors: (disk_size / 512 - 1).try_into().unwrap_or(u32::MAX),
+        sys: 0xEE,
+    };
+    mbr.write_into(&mut file).unwrap();
     let mut gpt = gptman::GPT::new_from(
         &mut file,
         512,

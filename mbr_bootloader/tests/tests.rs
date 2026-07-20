@@ -1,12 +1,6 @@
-use std::fs::metadata;
 use std::process::{Command, Stdio};
 
 use mbr_bootloader::MAGIC;
-
-#[test]
-fn fits() {
-    assert!(metadata("build/bootloader.bin").unwrap().len() <= 440);
-}
 
 fn test_img(img: &str, partition_lba: u64) {
     let output = Command::new("timeout")
@@ -44,16 +38,21 @@ fn test_img(img: &str, partition_lba: u64) {
 }
 
 #[test]
-fn boots_gpt_small() {
-    test_img("gpt.img", 0x22);
+fn boots_1_1() {
+    test_img("gpt_1_1.img", 0x22);
 }
 
 #[test]
-fn boots_gpt_large() {
+fn boots_1_128() {
+    test_img("gpt_1_128.img", 0x22);
+}
+
+#[test]
+fn boots_4_1() {
+    test_img("gpt_4_1.img", 0x22);
+}
+
+#[test]
+fn boots_large() {
     test_img("gpt_large.img", 0x1FFFFFFDE);
-}
-
-#[test]
-fn boots_gpt_last_entry() {
-    test_img("gpt_last_entry.img", 0x22);
 }
