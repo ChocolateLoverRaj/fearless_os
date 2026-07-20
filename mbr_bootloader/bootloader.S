@@ -4,24 +4,23 @@ SECTOR_1_ADDR equ 0x7C00
 PARTITIONS_ADDR equ SECTOR_1_ADDR
 MBR_ADDR equ 0x7A00
 LBA_ADDR_ADDR equ MBR_ADDR - 12
-ENTRIES_LEFT_ADDR equ LBA_ADDR_ADDR - 4
-BUFFER_ADDR equ ENTRIES_LEFT_ADDR - 26
+BUFFER_ADDR equ LBA_ADDR_ADDR - 26
 
 section .stage_0 vstart=0x7C00
 stage_0_start:
     cli
     xor ax, ax      ; ax = 0 (cheap way to zero a register, see earlier explanation)
     mov ds, ax      ; ds = 0 — so [addr] means physical address 'addr', not addr+something
-    mov es, ax      ; es = 0 — needed since rep movsb uses es:di for the destination
+    mov es, ax
     mov ss, ax      ; ss = 0 — stack segment, paired with sp below
     mov sp, BUFFER_ADDR
 
     cld             ; clear direction flag — makes movsb increment si/di (copy forward), not decrement
-    ; Copy 128 x u32 from 0x7C00 to 0x7A00
+    ; Copy 256 x u17 from 0x7C00 to 0x7A00
     mov si, 0x7C00
     mov di, 0x7A00
-    mov cx, 128
-    rep movsd
+    mov cx, 256
+    rep movsw
 
     ; Jump to start of next stage. We explicitly set CS:IP to 0x0000:stage1_start
     jmp 0x0000:stage_1_start
@@ -56,15 +55,19 @@ stage_1_start:
     mov si, msg_reading_gpt_header
     call print
 
-    mov word [LBA_ADDR_ADDR], SECTOR_1_ADDR
-    mov word [LBA_ADDR_ADDR + 0x2], 0
-    mov dword [LBA_ADDR_ADDR + 0x4], 1
-    mov dword [LBA_ADDR_ADDR + 0x8], 0
+    mov di, LBA_ADDR_ADDR
+    mov ax, SECTOR_1_ADDR
+    stosw
+    xor eax, eax
+    stosw
+    inc eax
+    stosd
+    dec eax
+    stosd
     call read_sector
     jc error_read_sector_1
 
-    mov eax, [SECTOR_1_ADDR + 0x50]
-    mov [ENTRIES_LEFT_ADDR], eax
+    mov bp, [SECTOR_1_ADDR + 0x50]
 
     ; Read starting LBA of the entries
     ; Reuse the buffer
@@ -99,10 +102,8 @@ stage_1_start:
         ; If bit 2 isn't there, don't do anything
         jnz .boot_partition
     .next:
-        mov esi, [ENTRIES_LEFT_ADDR]
-        dec esi
+        dec bp
         jz no_bootable_partition
-        mov [ENTRIES_LEFT_ADDR], esi
         add bx, 128
         cmp bx, 512
         jl .read_entry
