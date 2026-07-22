@@ -1,23 +1,7 @@
-ORG 0x7C00
+ORG 0x400
 BITS 16
 
 Start:
-        cli
-        ; Some BIOS' may load us at 0x0000:0x7C00 while other may load us at 0x07C0:0x0000.
-        ; Do a far jump to fix this issue, and reload CS to 0x0000.
-        jmp 0x0000:AfterReloadCs
-
-AfterReloadCs:
-        xor ax, ax
-        mov ss, ax
-        mov sp, Start
-        mov ds, ax
-        mov es, ax
-        mov fs, ax
-        mov gs, ax
-        ; clear the direction flag
-        cld
-
         ; Check whether we support Long Mode or not.
         ; Check whether CPUID is supported or not.
         ; It's supported, bit 0x200000 can be changed
@@ -77,29 +61,11 @@ EnableA20:
     .Enabled:
 
 GetMemory:
-        int 0x12
-        jc ErrorGettingMemory
-        ; ax = number of KiB of memory available, starting from address 0
-        ; We'll need 12 KiB for 3 page tables
-        cmp ax, 12
-        jl NotEnoughMem
-
-        ; Copy the pointer to the GDT and the GDT
-        mov si, GdtPointer
-        mov di, 0xFD6
-        mov cx, 17
-        repe movsw
-
         ; Load the GDT
-        lgdt [0xFD6]
-
-        ; Create the (empty) IDT
-        xor ax, ax
-        mov cx, 4
-        rep stosw
+        lgdt [0x3F8]
 
         ; Load the IDT
-        lidt [0xFF8]
+        lidt [0x3F2]
 
         ; Create page tables, identity-mapping the bottom 1 GiB
         PRESENT equ 1 << 0
@@ -113,6 +79,7 @@ GetMemory:
         ; Skip page at 0x0 because Rust doesn't allow null pointer operations
         ; Create the first entry
         ; Point to 8 KiB address
+        mov di, 0x1000
         mov eax, PRESENT | WRITABLE | ((0x2000 >> 12) << 12)
         stosd
         ; Zero the rest
@@ -194,20 +161,6 @@ ErrorGettingMemory:
 
 NotEnoughMem:
         jmp $
-
-GdtPointer:
-    ; Size of GDT - 1
-    dw 0x17
-    ; Address of GDT
-    dq 0xFE0
-
-Gdt:
-    .Null:
-        dq 0x0000000000000000             ; Null Descriptor - should be present.
-    .Code:
-        dq 0x00209A0000000000             ; 64-bit code descriptor (exec/read).
-    .Data:
-        dq 0x0000920000000000             ; 64-bit data descriptor (read/write).
 
 [BITS 64]
 LongMode:

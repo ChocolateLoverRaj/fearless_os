@@ -16,7 +16,7 @@ stage_0_start:
     mov sp, BUFFER_ADDR
 
     cld             ; clear direction flag — makes movsb increment si/di (copy forward), not decrement
-    ; Copy 256 x u17 from 0x7C00 to 0x7A00
+    ; Copy 256 x u16 from 0x7C00 to 0x7A00
     mov si, 0x7C00
     mov di, 0x7A00
     mov cx, 256
