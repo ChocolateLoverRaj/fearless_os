@@ -1,9 +1,10 @@
-SELF_MOVE_ADDR equ 0x200
-
-ORG SELF_MOVE_ADDR + STAGE_0_SIZE
+; FIRST_SECTOR_ADDR will be externally supplied
+; STAGE_0_SIZE will be externally supplied
+; STAGE_2_ADDR will be externally supplied
+; STAGE_2_LEN will be externally supplied
+ORG FIRST_SECTOR_ADDR + STAGE_0_SIZE
 BITS 16
 
-FILE_LOAD_ADDR equ 0x400
 
 Start:
         mov si, Buffer
@@ -12,7 +13,7 @@ Start:
         jc ErrorReading
 
         ; Jump to the next stage
-        jmp 0x0:FILE_LOAD_ADDR
+        jmp 0x0:STAGE_2_ADDR
 
 ErrorReading:
         jmp $
@@ -24,11 +25,11 @@ Buffer:
         ; Reserved, must be 0
         db 0
         ; # of blocks to transfer
-        db (FILE_LEN + 0x200 - 1) / 0x200
+        db (STAGE_2_LEN + 0x200 - 1) / 0x200
         ; Reserved, must be 0
         db 0
         ; Destination offset
-        dw FILE_LOAD_ADDR
+        dw STAGE_2_ADDR
         ; Destination segment
         dw 0
         ; Starting LBA (64 bits)

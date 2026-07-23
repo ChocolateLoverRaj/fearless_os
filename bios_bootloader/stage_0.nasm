@@ -1,10 +1,9 @@
 ORG 0x7C00
 BITS 16
 
-SELF_MOVE_ADDR equ 0x200
-FILE_LOAD_ADDR equ 0x400
-KB_NEEDED equ (FILE_LOAD_ADDR + FILE_LEN + 0x400 - 1) / 0x400
-; FILE_LEN will be externally supplied
+; KIB_NEEDED will be externally supplied
+; FIRST_SECTOR_ADDR will be externally supplied
+; STACK_TOP_ADDR will be externally supplied
 
 Start:
         cli
@@ -13,7 +12,7 @@ Start:
 AfterReloadCs:
         xor ax, ax
         mov ss, ax
-        mov sp, SELF_MOVE_ADDR
+        mov sp, STACK_TOP_ADDR
         mov ds, ax
         mov es, ax
         mov fs, ax
@@ -33,17 +32,17 @@ AfterReloadCs:
         ; Check if there is enough low memory
         int 0x12
         jc ErrorGettingMemory
-        cmp ax, KB_NEEDED
+        cmp ax, KIB_NEEDED
         jl ErrorNotEnoughMem
 
-        ; Copy self down
+        ; Copy self
         mov si, 0x7C00
-        mov di, SELF_MOVE_ADDR
+        mov di, FIRST_SECTOR_ADDR
         mov cx, 256
         rep movsw
 
         ; Jump to self down
-        jmp SELF_MOVE_ADDR + (End - Start)
+        jmp FIRST_SECTOR_ADDR + (End - Start)
 
 ErrorCheckingExtensions:
         jmp $

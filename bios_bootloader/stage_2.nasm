@@ -1,4 +1,8 @@
-ORG 0x400
+; STAGE_2_ADDR will be externally supplied
+; PAGE_TABLES_ADDR will be externally supplied
+; GDT_POINTER_ADDR will be externally supplied
+; IDT_ADDR will be externally supplied
+ORG STAGE_2_ADDR
 BITS 16
 
 Start:
@@ -61,11 +65,9 @@ EnableA20:
     .Enabled:
 
 GetMemory:
-        ; Load the GDT
-        lgdt [0x3F8]
-
-        ; Load the IDT
-        lidt [0x3F2]
+        ; Load the GDT and IDT, located in stage_1.asm, and part of the first sector
+        lgdt [GDT_POINTER_ADDR]
+        lidt [IDT_ADDR]
 
         ; Create page tables, identity-mapping the bottom 1 GiB
         PRESENT equ 1 << 0
@@ -76,10 +78,9 @@ GetMemory:
         PAGE_SIZE equ 1 << 7
 
         ; Create the top level page table
-        ; Skip page at 0x0 because Rust doesn't allow null pointer operations
         ; Create the first entry
         ; Point to 8 KiB address
-        mov di, 0x1000
+        mov di, PAGE_TABLES_ADDR
         mov eax, PRESENT | WRITABLE | ((0x2000 >> 12) << 12)
         stosd
         ; Zero the rest
