@@ -2,4 +2,6 @@
 build-std = ["core"]
 
 [build]
-rustflags = ["-C", "relocation-model=pic"]
+rustflags = [
+    "-C", "relocation-model=static",
+]

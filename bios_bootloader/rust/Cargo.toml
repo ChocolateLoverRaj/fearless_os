@@ -9,3 +9,6 @@ test = false
 bench = false
 
 [dependencies]
+
+[build-dependencies]
+scripts = { path = "../scripts" }

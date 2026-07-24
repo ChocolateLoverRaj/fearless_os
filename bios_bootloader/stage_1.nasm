@@ -5,7 +5,6 @@
 ORG FIRST_SECTOR_ADDR + STAGE_0_SIZE
 BITS 16
 
-
 Start:
         mov si, Buffer
         mov ah, 0x42
@@ -34,30 +33,3 @@ Buffer:
         dw 0
         ; Starting LBA (64 bits)
         dq 1
-
-times 0x1DA - (STAGE_0_SIZE + ($ - $$)) db 0x67
-
-Gdt:
-    .Null:
-        dq 0x0000000000000000             ; Null Descriptor - should be present.
-    .Code:
-        dq 0x00209A0000000000             ; 64-bit code descriptor (exec/read).
-    .Data:
-        dq 0x0000920000000000             ; 64-bit data descriptor (read/write).
-    .End:
-
-Idt:
-    .Length:
-        dw 0
-    .Addr:
-        dd 0
-
-GdtPointer:
-    .Size:
-        ; Size of GDT - 1
-        dw (Gdt.End - Gdt) - 1
-    .Addr:
-        ; Address of GDT
-        dd Gdt
-
-dw 0xAA55

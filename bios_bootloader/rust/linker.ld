@@ -1,18 +1,11 @@
-/* Where your bootloader will load and start executing this kernel.
-   Since you're building PIC/PIE (per our recent discussion), this
-   is really just the *link-time* base for computing relative offsets
-   — your bootloader adds its actual chosen load address on top. */
-KERNEL_BASE = 0x0;
-
 SECTIONS
 {
-    . = KERNEL_BASE;
-
+    . = LOAD_ADDR;
     __kernel_start = .;
 
-    .text : ALIGN(4K)
+    .text :
     {
-        .text.first
+        .text.start
         *(.text .text.*)
     }
 
@@ -26,20 +19,13 @@ SECTIONS
         *(.data .data.*)
     }
 
-    .bss : ALIGN(4K)
+    .bss : ALIGN(8)
     {
         __bss_start = .;
         *(.bss .bss.*)
         *(COMMON)
+        . = ALIGN(8);
         __bss_end = .;
-    }
-
-    /* A small fixed-size stack, placed right after everything else.
-       Adjust size as needed — 8KB here as a starting point. */
-    .stack (NOLOAD) : ALIGN(4K)
-    {
-        . += 8K;
-        __stack_top = .;
     }
 
     __kernel_end = .;
@@ -55,3 +41,5 @@ SECTIONS
         *(.note.*)
     }
 }
+
+__bss_u64s_to_copy = (__bss_end - __bss_start) / 8;

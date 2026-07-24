@@ -5,3 +5,10 @@ version = 4
 [[package]]
 name = "bios_bootloader"
 version = "0.1.0"
+dependencies = [
+ "scripts",
+]
+
+[[package]]
+name = "scripts"
+version = "0.1.0"
