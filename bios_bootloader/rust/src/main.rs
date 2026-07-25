@@ -7,6 +7,8 @@ unsafe extern "C" {
     static __bss_u64s_to_copy: *const u8;
 }
 
+static A: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
 #[unsafe(naked)]
 #[unsafe(link_section = ".text.start")]
 #[unsafe(no_mangle)]
@@ -27,8 +29,12 @@ unsafe extern "C" fn _start() {
     )
 }
 
-unsafe extern "C" fn rust_start(_: u64, _: u64, callback: extern "C" fn(u8) -> !) {
-    callback(0x67)
+unsafe extern "C" fn rust_start(_: u64, _: u64, callback: extern "C" fn(u8)) -> ! {
+    for c in "Hello from Rust in long mode!\r\n".as_bytes() {
+        callback(*c);
+    }
+    A.store(true, core::sync::atomic::Ordering::Relaxed);
+    loop {}
 }
 
 #[panic_handler]

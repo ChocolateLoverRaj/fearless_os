@@ -202,7 +202,35 @@ RealModeIdt:
     .Addr:
         dd 0x00000000
 
-PrintReal:
+[BITS 64]
+ALIGN 16
+Print:
+        ; Enter 32 bit compatibility mode by long jumping
+        ; This is how u long jump in real mode:
+        ; CS
+        push 0x10
+        ; jmp address
+        push PrintCompat
+        retfq
+
+[BITS 32]
+PrintCompat:
+        ; Disable the interrupts:
+        ; Already disabled
+
+        ; 2. Turn off paging
+        mov eax, cr0
+        and eax, ~PG
+        mov cr0, eax
+
+        ; 3. Use GDT with 16-bit tables (skip this step if one is already available):
+        ; Our GDT does have 16 bit code and data segments
+
+        ; 4. Far jump to 16-bit protected mode:
+        jmp 0x18:PrintProtected16
+
+[BITS 16]
+PrintProtected16:
         ; 5. Load data segment selectors with 16-bit indexes:
         ; The offset of your .Data16 descriptor in the GDT is 0x30
         mov ax, 0x30
@@ -222,9 +250,9 @@ PrintReal:
         mov cr0, eax
 
         ; 8. Far jump to real mode:
-        jmp 0x0:.Real
+        jmp 0x0:PrintReal
 
-    .Real
+PrintReal:
         ; 9. Reload data segment registers with real mode values:
         xor ax, ax
         mov ds, ax
@@ -236,48 +264,21 @@ PrintReal:
         ; 10. Set stack pointer to appropriate value:
         ; We're skipping this since it should be intact
 
-        ; Enable interrupts:
-        ; We're skipping this, it might be needed though
-
         mov ax, di
         mov ah, 0x0E
         int 0x10
-        mov ax, di
-        mov ah, 0x0E
-        int 0x10
-        jmp $
 
+        ; Enable protection and paging in Cr0
+        mov eax, cr0
+        or eax, PE | PG
+        mov cr0, eax
 
+        ; Load CS with 64 bit segment and flush the instruction cache
+        jmp 0x8:PrintRet
 
 [BITS 64]
-ALIGN 16
-Print:
-        ; Enter 32 bit compatibility mode by long jumping
-        ; This is how u long jump in real mode:
-        ; CS
-        push 0x10
-        ; jmp address
-        push PrintCompat
-        retfq
-
-[BITS 32]
-PrintCompat:
-    ; Disable the interrupts:
-    ; Already disabled
-
-    ; 2. Turn off paging
-    mov eax, cr0
-    and eax, ~PG
-    mov cr0, eax
-
-    mov eax, 0
-    mov cr3, eax
-
-    ; 3. Use GDT with 16-bit tables (skip this step if one is already available):
-    ; Our GDT does have 16 bit code and data segments
-
-    ; 4. Far jump to 16-bit protected mode:
-    jmp 0x18:PrintReal
+PrintRet:
+    ret
 
 [BITS 64]
 LongMode:

@@ -16,7 +16,6 @@ fn main() {
     let stage_2_len = fs::metadata(&stage_2_path).unwrap().len();
     let load_addr = u64::from(STAGE_2_ADDR) + stage_2_len;
     println!("cargo:rustc-link-arg=--defsym=LOAD_ADDR={load_addr:#X}");
-    println!("cargo:warning={load_addr:#X}");
     let stage_2_path = stage_2_path.to_str().unwrap();
-    println!("cargo:rereun-if-changed={stage_2_path}");
+    println!("cargo:rerun-if-changed={stage_2_path}");
 }

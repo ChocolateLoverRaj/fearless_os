@@ -1,11 +1,10 @@
 SECTIONS
 {
     . = LOAD_ADDR;
-    __kernel_start = .;
 
     .text :
     {
-        .text.start
+        KEEP(*(.text.start))
         *(.text .text.*)
     }
 
@@ -27,8 +26,6 @@ SECTIONS
         . = ALIGN(8);
         __bss_end = .;
     }
-
-    __kernel_end = .;
 
     /* Discard sections you don't need in the final flat binary —
        debug info, unwind tables, and (if you're not consuming them
