@@ -4,6 +4,11 @@ use std::{
 };
 
 fn main() {
+    // Checks
+    let first_sector_len = fs::metadata("../build/stage_0.bin").unwrap().len()
+        + fs::metadata("../build/stage_1.bin").unwrap().len();
+    assert!(first_sector_len < 512);
+
     let mut file = OpenOptions::new()
         .create(true)
         .write(true)
