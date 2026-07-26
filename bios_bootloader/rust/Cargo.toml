@@ -15,3 +15,5 @@ scripts = { path = "../scripts" }
 log = "0.4.33"
 scripts = { version = "0.1.0", path = "../scripts" }
 spin = { version = "0.12.2", default-features = false, features = ["once"] }
+unicode-segmentation = { version = "1.13.3", default-features = false, features = ["no_std"] }
+zerocopy = { version = "0.8.55", default-features = false, features = ["derive"] }

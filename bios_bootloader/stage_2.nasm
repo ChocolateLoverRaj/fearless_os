@@ -201,19 +201,48 @@ RealModeIdt:
     .Addr:
         dd 0x00000000
 
+; Stores data returned through (rax, rdx)
+ALIGN 8
+Buffer:
+    times 16 db 0
+
+Int10Real:
+        mov ax, di
+        mov ah, 0x0E
+        int 0x10
+        ret
+
+Int15Real:
+        ; edi should be passed from caller to Int15
+        mov edx, 0x534D4150
+        mov eax, 0xE820
+        mov ecx, 24
+        int 0x15
+        ; return: carry flag, eax, ebx, cl
+        ; ch = 1 if carry flag set, otherwise 0
+        xor ch, ch
+        setc ch
+        mov [Buffer], eax
+        mov [Buffer + 0x4], ebx
+        mov [Buffer + 0x8], cx
+        mov word [Buffer + 0xA], 0
+        mov dword [Buffer + 0xC], 0
+        ret
+
 [BITS 64]
 ALIGN 16
-Print:
+CallReal:
+        push ax
         ; Enter 32 bit compatibility mode by long jumping
         ; This is how u long jump in real mode:
         ; CS
         push 0x10
         ; jmp address
-        push PrintCompat
+        push CallRealCompat
         retfq
 
 [BITS 32]
-PrintCompat:
+CallRealCompat:
         ; Disable the interrupts:
         ; Already disabled
 
@@ -226,10 +255,10 @@ PrintCompat:
         ; Our GDT does have 16 bit code and data segments
 
         ; 4. Far jump to 16-bit protected mode:
-        jmp 0x18:PrintProtected16
+        jmp 0x18:CallRealProtected16
 
 [BITS 16]
-PrintProtected16:
+CallRealProtected16:
         ; 5. Load data segment selectors with 16-bit indexes:
         ; The offset of your .Data16 descriptor in the GDT is 0x30
         mov ax, 0x30
@@ -249,9 +278,9 @@ PrintProtected16:
         mov cr0, eax
 
         ; 8. Far jump to real mode:
-        jmp 0x0:PrintReal
+        jmp 0x0:CallRealReal
 
-PrintReal:
+CallRealReal:
         ; 9. Reload data segment registers with real mode values:
         xor ax, ax
         mov ds, ax
@@ -263,9 +292,8 @@ PrintReal:
         ; 10. Set stack pointer to appropriate value:
         ; We're skipping this since it should be intact
 
-        mov ax, di
-        mov ah, 0x0E
-        int 0x10
+        pop ax
+        call ax
 
         ; Enable protection and paging in Cr0
         mov eax, cr0
@@ -273,22 +301,30 @@ PrintReal:
         mov cr0, eax
 
         ; Load CS with 64 bit segment and flush the instruction cache
-        jmp 0x8:PrintRet
+        jmp 0x8:CallRealRet
 
 [BITS 64]
-PrintRet:
+CallRealRet:
+    mov rax, [Buffer]
+    mov rdx, [Buffer + 0x8]
     ret
+
+[BITS 64]
+Int10:
+    mov ax, Int10Real
+    jmp CallReal
 
 [BITS 64]
 ALIGN 16
 Int15:
-    jmp $
+    mov ax, Int15Real
+    jmp CallReal
 
 [BITS 64]
 ALIGN 2
 Table:
     .Int10:
-        dw Print
+        dw Int10
     .Int15:
         dw Int15
 
