@@ -134,7 +134,6 @@ GetMemory:
         or eax, PE | PG
         mov cr0, eax
 
-
         ; Load CS with 64 bit segment and flush the instruction cache
         jmp 0x8:LongMode
 
@@ -281,8 +280,20 @@ PrintRet:
     ret
 
 [BITS 64]
+ALIGN 16
+Int15:
+    jmp $
+
+[BITS 64]
+ALIGN 2
+Table:
+    .Int10:
+        dw Print
+    .Int15:
+        dw Int15
+
 LongMode:
-    mov rdx, Print
+    mov rdx, Table
 
 ; Rust code is aligned to 16 so we make the end of our file also aligned to 16
 ALIGN 16

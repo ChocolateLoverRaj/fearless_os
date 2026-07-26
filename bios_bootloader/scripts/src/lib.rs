@@ -1,3 +1,4 @@
+#![no_std]
 pub const RESERVED_SIZE: u16 = 0x5000;
 pub const STACK_SIZE: u16 = 0x1000;
 pub const STACK_TOP_ADDR: u16 = RESERVED_SIZE + STACK_SIZE;

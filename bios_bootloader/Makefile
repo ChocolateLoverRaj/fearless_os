@@ -29,7 +29,7 @@ run: $(BUILD_DIR)/disk.img
         --machine q35,accel=kvm:whpx:hvf:tcg \
         --no-reboot \
         --nographic \
-        -drive file=$(BUILD_DIR)/disk.img,format=raw,if=ide,snapshot=on
+        -drive file=$(BUILD_DIR)/disk.img,format=raw,if=ide,snapshot=on -s -S
 
 clean:
 	rm -rf $(BUILD_DIR)

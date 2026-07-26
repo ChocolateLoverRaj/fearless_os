@@ -8,7 +8,10 @@ name = "bios_bootloader"
 test = false
 bench = false
 
-[dependencies]
-
 [build-dependencies]
 scripts = { path = "../scripts" }
+
+[dependencies]
+log = "0.4.33"
+scripts = { version = "0.1.0", path = "../scripts" }
+spin = { version = "0.12.2", default-features = false, features = ["once"] }
