@@ -292,8 +292,12 @@ CallRealReal:
         ; 10. Set stack pointer to appropriate value:
         ; We're skipping this since it should be intact
 
+        sti
+
         pop ax
         call ax
+
+        cli
 
         ; Enable protection and paging in Cr0
         mov eax, cr0
@@ -317,6 +321,7 @@ Int10:
 [BITS 64]
 ALIGN 16
 Int15:
+    mov ebx, esi
     mov ax, Int15Real
     jmp CallReal
 
@@ -330,6 +335,8 @@ Table:
 
 LongMode:
     mov rdx, Table
+    cli
+    jmp Rust
 
 ; Rust code is aligned to 16 so we make the end of our file also aligned to 16
 ALIGN 16

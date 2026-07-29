@@ -126,6 +126,7 @@ struct BootloaderTable {
 unsafe extern "C" fn rust_start(_: u64, _: u64, bootloader_table: &BootloaderTable, _: u64) -> ! {
     logger::init(bootloader_table.int_10);
     log::info!("Hello from Rust in long mode!");
+    // loop {}
     let mut buffer = [Default::default(); _];
     let mut entry_index = 0;
     loop {
@@ -139,6 +140,7 @@ unsafe extern "C" fn rust_start(_: u64, _: u64, bootloader_table: &BootloaderTab
         };
         entry_index = next_entry_index.get();
     }
+    log::info!("Done reading entries");
     loop {}
 }
 

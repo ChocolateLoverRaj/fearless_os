@@ -29,6 +29,8 @@ Start:
     .SmallEnough:
         ; At this point, eax = sectors to read (max 127)
         mov [Buffer.TransferCount], al
+        mov si, msg
+        call Print
         mov si, Buffer
         pushad
         mov ah, 0x42
@@ -52,6 +54,8 @@ Start:
         jmp .Loop
 
     .Done:
+        mov si, msg_done
+        call Print
         ; Jump to the next stage
         jmp 0x0:STAGE_2_ADDR
 
@@ -81,3 +85,23 @@ Buffer:
     .StartingLba
         ; Starting LBA (64 bits)
         dq 1
+
+msg db "Reading", 0x0D, 0x0A, 0
+msg_done db "Jumping to stage 2", 0x0D, 0x0A, 0
+
+Print:
+    pushad
+    .Loop:
+        lodsb
+        test al, al
+        jz .Done
+
+        mov ah, 0x0E
+        mov bh, 0
+        int 0x10
+
+        jmp .Loop
+
+    .Done:
+        popad
+        ret
