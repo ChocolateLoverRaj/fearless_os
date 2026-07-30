@@ -3,7 +3,13 @@
 mod logger;
 mod writer_with_cr;
 
-use core::{arch::naked_asm, mem, num::NonZero, panic::PanicInfo};
+use core::{
+    arch::naked_asm,
+    mem,
+    num::NonZero,
+    panic::PanicInfo,
+    ptr::{addr_of, addr_of_mut},
+};
 
 use zerocopy::{FromBytes, IntoBytes, TryFromBytes, transmute, try_transmute};
 
@@ -118,9 +124,79 @@ impl Int15Ptr {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy, TryFromBytes)]
+struct ExtendedReadOutput {
+    carry_flag: bool,
+    ah: u8,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, IntoBytes)]
+struct ExtendedReadInput {
+    device_address_packet: u16,
+    disk: u8,
+    _padding: u8,
+}
+
+type ExtendedReadFn = unsafe extern "C" fn(u32) -> u16;
+
+#[derive(Debug)]
+enum ExtendedReadError {
+    CarryFlagSet(u8),
+}
+
+#[repr(C)]
+struct ExtendedReadPtr(u16);
+
+#[repr(C)]
+struct DeviceAddressPacket {
+    packet_size: u8,
+    _reserved_0: u8,
+    blocks_to_transfer: u8,
+    _reserved_1: u8,
+    host_buffer_address: u32,
+    starting_lba: u64,
+}
+
+impl ExtendedReadPtr {
+    pub fn call(
+        &self,
+        disk: u8,
+        starting_lba: u64,
+        dest: &mut [u8],
+    ) -> Result<(), ExtendedReadError> {
+        log::info!("dest: {dest:p}");
+        let mut packet = DeviceAddressPacket {
+            packet_size: size_of::<DeviceAddressPacket>().try_into().unwrap(),
+            _reserved_0: 0,
+            blocks_to_transfer: (dest.len() / 512).try_into().unwrap(),
+            _reserved_1: 0,
+            host_buffer_address: dest.as_ptr().addr().try_into().unwrap(),
+            starting_lba,
+        };
+        let packet_addr = addr_of_mut!(packet).addr().try_into().unwrap();
+        let input = ExtendedReadInput {
+            device_address_packet: packet_addr,
+            disk,
+            _padding: Default::default(),
+        };
+        let extended_read = unsafe { mem::transmute::<_, ExtendedReadFn>(self.0 as usize) };
+        let ret = unsafe { extended_read(transmute!(input)) };
+        let output: ExtendedReadOutput = try_transmute!(ret).unwrap();
+        if output.carry_flag {
+            return Err(ExtendedReadError::CarryFlagSet(output.ah));
+        }
+        Ok(())
+    }
+}
+
+#[repr(C)]
 struct BootloaderTable {
     int_10: Int10Ptr,
     int_15: Int15Ptr,
+    extended_read: ExtendedReadPtr,
+    disk: u8,
+    _padding: u8,
 }
 
 unsafe extern "C" fn rust_start(_: u64, _: u64, bootloader_table: &BootloaderTable, _: u64) -> ! {
@@ -141,11 +217,20 @@ unsafe extern "C" fn rust_start(_: u64, _: u64, bootloader_table: &BootloaderTab
         entry_index = next_entry_index.get();
     }
     log::info!("Done reading entries");
+    let mut buffer = [Default::default(); 512];
+    let disk = bootloader_table.disk;
+    log::info!("Reading disk: {disk:#X}");
+    bootloader_table
+        .extended_read
+        .call(bootloader_table.disk, 0, &mut buffer)
+        .unwrap();
+    log::info!("sector 0: {buffer:x?}");
     loop {}
 }
 
 #[panic_handler]
 fn panic_handler(panic_info: &PanicInfo) -> ! {
-    let _ = panic_info;
+    log::error!("{panic_info}");
+    log::error!("---");
     loop {}
 }

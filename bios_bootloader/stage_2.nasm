@@ -4,6 +4,7 @@ ORG STAGE_2_ADDR
 BITS 16
 
 Start:
+        mov [Table.Disk], dl
         ; Check whether we support Long Mode or not.
         ; Check whether CPUID is supported or not.
         ; It's supported, bit 0x200000 can be changed
@@ -220,13 +221,19 @@ Int15Real:
         int 0x15
         ; return: carry flag, eax, ebx, cl
         ; ch = 1 if carry flag set, otherwise 0
-        xor ch, ch
         setc ch
         mov [Buffer], eax
         mov [Buffer + 0x4], ebx
         mov [Buffer + 0x8], cx
         mov word [Buffer + 0xA], 0
         mov dword [Buffer + 0xC], 0
+        ret
+
+ExtendedReadReal:
+        mov ah, 0x42
+        int 0x13
+        setc al
+        mov [Buffer], ax
         ret
 
 [BITS 64]
@@ -326,12 +333,27 @@ Int15:
     jmp CallReal
 
 [BITS 64]
+ALIGN 16
+ExtendedRead:
+    mov esi, edi
+    shr edi, 16
+    mov dl, dil
+    mov ax, ExtendedReadReal
+    jmp CallReal
+
+[BITS 64]
 ALIGN 2
 Table:
     .Int10:
         dw Int10
     .Int15:
         dw Int15
+    .ExtendedRead:
+        dw ExtendedRead
+    .Disk:
+        db 0
+    .Padding:
+        db 0
 
 LongMode:
     mov rdx, Table
