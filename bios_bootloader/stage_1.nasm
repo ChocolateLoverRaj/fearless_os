@@ -12,6 +12,14 @@ Start:
         cmp ax, KIB_NEEDED
         jl ErrorNotEnoughMem
 
+        ; Set starting LBA
+        ; ebx = low 32 bits of partition LBA
+        pop ebx
+        ; ecx = high 32 bits of partition LBA
+        pop ecx
+        add [Buffer.StartingLba], ebx
+        adc [Buffer.StartingLba + 4], ecx
+
         ; ecx = sectors left to read
         mov ecx, (STAGE_2_FILE_LEN + 0x200 - 1) / 0x200
     .Loop:
@@ -99,7 +107,7 @@ Buffer:
         dq 1
 
 msg db "Reading", 0x0D, 0x0A, 0
-msg_done db "Jumping to stage 2", 0x0D, 0x0A, 0
+msg_done db "Jumping to stage 2.", 0x0D, 0x0A, 0
 
 Print:
     pushad

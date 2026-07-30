@@ -8,14 +8,55 @@ BUFFER_ADDR equ LBA_ADDR_ADDR - 26
 
 section .stage_0 vstart=0x7C00
 stage_0_start:
-    cli
-    xor ax, ax      ; ax = 0 (cheap way to zero a register, see earlier explanation)
-    mov ds, ax      ; ds = 0 — so [addr] means physical address 'addr', not addr+something
-    mov es, ax
-    mov ss, ax      ; ss = 0 — stack segment, paired with sp below
-    mov sp, BUFFER_ADDR
+        ; Workaround for some BIOSes that require this stub
+        jmp skip_bpb
+        nop
 
-    cld             ; clear direction flag — makes movsb increment si/di (copy forward), not decrement
+        ; Some BIOSes will do a funny and decide to overwrite bytes of code in
+        ; the section where a FAT BPB would be, potentially overwriting
+        ; bootsector code.
+        ; Avoid that by filling the BPB area with dummy values.
+        ; Some of the values have to be set to certain values in order
+        ; to boot on even quirkier machines.
+        ; Source: https://github.com/freebsd/freebsd-src/blob/82a21151cf1d7a3e9e95b9edbbf74ac10f386d6a/stand/i386/boot2/boot1.S
+bpb:
+        times 3-($-$$) db 0
+    .bpb_oem_id:            db "LIMINE  "
+    .bpb_sector_size:       dw 512
+    .bpb_sects_per_cluster: db 0
+    .bpb_reserved_sects:    dw 0
+    .bpb_fat_count:         db 0
+    .bpb_root_dir_entries:  dw 0
+    .bpb_sector_count:      dw 0
+    .bpb_media_type:        db 0
+    .bpb_sects_per_fat:     dw 0
+    .bpb_sects_per_track:   dw 18
+    .bpb_heads_count:       dw 2
+    .bpb_hidden_sects:      dd 0
+    .bpb_sector_count_big:  dd 0
+    .bpb_drive_num:         db 0
+    .bpb_reserved:          db 0
+    .bpb_signature:         db 0
+    .bpb_volume_id:         dd 0
+    .bpb_volume_label:      db "LIMINE     "
+    .bpb_filesystem_type:   times 8 db 0
+skip_bpb:
+    cli
+    cld
+    jmp 0x0:after_reload_cs
+
+after_reload_cs:
+    xor si, si
+    mov ss, si
+    mov sp, BUFFER_ADDR
+    mov ds, si
+    mov es, si
+    mov fs, si
+    mov gs, si
+
+    ; Set error char to '0'
+    mov dh, 0x30
+
     ; Copy 256 x u16 from 0x7C00 to 0x7A00
     mov si, 0x7C00
     mov di, 0x7A00
@@ -52,7 +93,8 @@ stage_1_start:
 
     .is_gpt:
     ; Read sector 1
-    mov si, msg_reading_gpt_header
+    ; Print 'H'
+    mov al, 0x48
     call print
 
     mov di, LBA_ADDR_ADDR
@@ -77,7 +119,8 @@ stage_1_start:
     rep movsw
 
     .read_entries_sector:
-        mov si, msg_reading_gpt_partitions
+        ; Print 'R'
+        mov al, 0x50
         call print
         call read_sector
         jc error_read_entries
@@ -112,7 +155,8 @@ stage_1_start:
         jmp .read_entries_sector
 
     .boot_partition:
-        mov si, msg_reading_partition
+        ; Print 'R'
+        mov al, 0x52
         call print
         ; Read the first sector of the partition
         mov word [LBA_ADDR_ADDR], 0x7C00
@@ -125,7 +169,13 @@ stage_1_start:
         jc error_read_partition
 
         ; Jump to the partition's BIOS code
-        mov si, msg_jumping_to_partition
+        ; Print 'J'
+        mov al, 0x4A
+        call print
+        ; Print new line
+        mov al, 0x0D
+        call print
+        mov al, 0x0A
         call print
         ; Set magic
         ; MAGIC will be passed as an input to nasm
@@ -135,70 +185,34 @@ stage_1_start:
         jmp 0x7C00
 
 error_not_gpt:
-    mov si, msg_err_not_gpt
-    jmp error
-
+    inc dh
 error_checking_extensions:
-    mov si, msg_check
-    jmp error
-
+    inc dh
 error_extensions_not_present:
-    mov si, msg_ext
-    jmp error
-
+    inc dh
 error_edd_not_present:
-    mov si, msg_edd
-    jmp error
-
+    inc dh
 error_read_sector_1:
-    mov si, msg_read1
-    jmp error
-
+    inc dh
 error_read_entries:
-    mov si, msg_entries
-    jmp error
-
+    inc dh
 error_read_partition:
-    mov si, msg_part
-    jmp error
-
+    inc dh
+error_bootflag:
+    inc dh
 no_bootable_partition:
-    mov si, msg_bootflag
-; must set si to error message before this
+    inc dh
 error:
-    call print
+    mov ah, 0x0E
+    mov al, dh
+    int 0x10
+    int 0x10
     jmp $
 
-msg_reading_gpt_header db "G_", 0
-msg_reading_gpt_partitions db "P_", 0
-msg_reading_partition db "A_", 0
-msg_jumping_to_partition db "J_", 0x0D, 0x0A, 0
-
-; Error EDD not present
-msg_edd         db "DD", 0
-; Error extensions not present
-msg_ext         db "EE", 0
-; Error checking extensions
-msg_check       db "CC", 0
-; Error reading sector 1
-msg_read1       db "11", 0
-; Error reading entries
-msg_entries     db "NN", 0
-; Error reading Partition
-msg_part        db "RR", 0
-; No bootable partition
-msg_bootflag    db "00", 0
-; Not a GPT disk
-msg_err_not_gpt db "LL", 0
-
 print:
-    lodsb
-    test al, al
-    jz .done
     mov ah, 0x0E
     int 0x10
-    jmp print
-.done:
+    int 0x10
     ret
 
 read_sector:

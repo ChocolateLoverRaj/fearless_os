@@ -35,7 +35,7 @@ Bpb:
     .bpb_reserved:          db 0
     .bpb_signature:         db 0
     .bpb_volume_id:         dd 0
-    .bpb_volume_label:      db "LIMINE     "
+    .bpb_volume_label:      db "FEARLESS OS"
     .bpb_filesystem_type:   times 8 db 0
 SkipBpb:
     cli
@@ -43,17 +43,23 @@ SkipBpb:
     jmp 0x0:AfterReloadCs
 
 AfterReloadCs:
-        xor ax, ax
-        mov ss, ax
+        xor si, si
+        mov ss, si
         mov sp, STACK_TOP_ADDR
-        mov ds, ax
-        mov es, ax
-        mov fs, ax
-        mov gs, ax
+        mov ds, si
+        mov es, si
+        mov fs, si
+        mov gs, si
         sti
 
         mov si, msg
         call Print
+
+        ; Check for magic from MBR bootloader
+        cmp eax, 0xA786B9FC
+        jne ErrorBadMagic
+        push ecx
+        push ebx
 
         ; Make sure that the 0x42 extension exists
         mov ah, 0x41
@@ -75,6 +81,9 @@ AfterReloadCs:
         ; Jump to self down
         jmp FIRST_SECTOR_ADDR + (End - Start)
 
+ErrorBadMagic:
+        jmp $
+
 ErrorCheckingExtensions:
         jmp $
 
@@ -87,6 +96,7 @@ ErrorEddNotPresent:
 msg db "Hello from Stage 0", 0x0D, 0x0A, 0
 
 Print:
+    pushad
     .Loop:
         lodsb
         test al, al
@@ -99,6 +109,7 @@ Print:
         jmp .Loop
 
     .Done:
+        popad
         ret
 
 End:
