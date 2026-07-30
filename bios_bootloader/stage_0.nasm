@@ -65,11 +65,6 @@ AfterReloadCs:
         test cx, 0x4
         jz ErrorEddNotPresent
 
-        ; Check if there is enough low memory
-        int 0x12
-        jc ErrorGettingMemory
-        cmp ax, KIB_NEEDED
-        jl ErrorNotEnoughMem
 
         ; Copy self
         mov si, Start
@@ -87,12 +82,6 @@ ErrorExtensionsNotPresent:
         jmp $
 
 ErrorEddNotPresent:
-        jmp $
-
-ErrorGettingMemory:
-        jmp $
-
-ErrorNotEnoughMem:
         jmp $
 
 msg db "Hello from Stage 0", 0x0D, 0x0A, 0

@@ -1,13 +1,19 @@
 ; FIRST_SECTOR_ADDR will be externally supplied
 ; STAGE_0_SIZE will be externally supplied
 ; STAGE_2_ADDR will be externally supplied
-; STAGE_2_LEN will be externally supplied
+; STAGE_2_FILE_LEN will be externally supplied
 ORG FIRST_SECTOR_ADDR + STAGE_0_SIZE
 BITS 16
 
 Start:
+        ; Check if there is enough low memory
+        int 0x12
+        jc ErrorGettingMemory
+        cmp ax, KIB_NEEDED
+        jl ErrorNotEnoughMem
+
         ; ecx = sectors left to read
-        mov ecx, (STAGE_2_LEN + 0x200 - 1) / 0x200
+        mov ecx, (STAGE_2_FILE_LEN + 0x200 - 1) / 0x200
     .Loop:
         test ecx, ecx
         jz .Done
@@ -59,6 +65,12 @@ Start:
         ; Jump to the next stage
         jmp 0x0:STAGE_2_ADDR
 
+ErrorGettingMemory:
+        jmp $
+
+ErrorNotEnoughMem:
+        jmp $
+
 ErrorReading:
         jmp $
 
@@ -72,7 +84,7 @@ Buffer:
         db 0
     .TransferCount
         ; # of blocks to transfer
-        db (STAGE_2_LEN + 0x200 - 1) / 0x200
+        db (STAGE_2_FILE_LEN + 0x200 - 1) / 0x200
     .Reserved2
         ; Reserved, must be 0
         db 0

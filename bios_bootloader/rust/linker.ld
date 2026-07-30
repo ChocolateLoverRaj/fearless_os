@@ -1,6 +1,7 @@
 SECTIONS
 {
     . = LOAD_ADDR;
+    __rust_start = .;
 
     .text :
     {
@@ -16,6 +17,7 @@ SECTIONS
     .data : ALIGN(4K)
     {
         *(.data .data.*)
+        __data_end = .;
     }
 
     .bss : ALIGN(8)
