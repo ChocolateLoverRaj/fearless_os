@@ -342,6 +342,19 @@ ExtendedRead:
     jmp CallReal
 
 [BITS 64]
+ALIGN 16
+VesaGetControllerInfo:
+        mov ax, VesaGetControllerInfoReal
+        jmp CallReal
+
+[BITS 16]
+VesaGetControllerInfoReal:
+        mov ax, 0x4f00
+        int 0x10
+        mov [Buffer], ax
+        ret
+
+[BITS 64]
 ALIGN 2
 Table:
     .Int10:
@@ -350,6 +363,8 @@ Table:
         dw Int15
     .ExtendedRead:
         dw ExtendedRead
+    .VesaGetControllerInfo:
+        dw VesaGetControllerInfo
     .Disk:
         db 0
     .Padding:

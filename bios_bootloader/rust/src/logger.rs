@@ -3,7 +3,7 @@ use core::{borrow::Borrow, fmt::Write};
 use log::{Log, max_level, set_logger, set_max_level};
 use spin::Once;
 
-use crate::{Int10Ptr, writer_with_cr::WriterWithCr};
+use crate::{bios::Int10Ptr, writer_with_cr::WriterWithCr};
 
 struct Logger {
     int_10: Int10Ptr,

@@ -14,10 +14,10 @@ $(BUILD_DIR)/mbr_bootloader.bin: $(R) scripts/src/bin/mbr_bootloader.rs ../mbr_b
 $(BUILD_DIR)/stage_2.bin: $(R) scripts/src/bin/stage_2.rs stage_2.nasm | $(BUILD_DIR)
 	cd scripts && cargo run --bin stage_2
 
-$(BUILD_DIR)/rust.bin: $(R) rust/Cargo.toml rust/Cargo.lock rust/.cargo/config.toml rust/build.rs rust/linker.ld rust/src/main.rs build/stage_2.bin | $(BUILD_DIR)
+$(BUILD_DIR)/rust.bin: $(R) rust/Cargo.toml rust/Cargo.lock rust/.cargo/config.toml rust/build.rs rust/linker.ld rust/src/*.rs build/stage_2.bin | $(BUILD_DIR)
 	cd rust && cargo objcopy --target x86_64-unknown-none -- -O binary ../$(BUILD_DIR)/rust.bin
 
-$(BUILD_DIR)/rust: $(R) rust/Cargo.toml rust/Cargo.lock rust/.cargo/config.toml rust/build.rs rust/linker.ld rust/src/main.rs build/stage_2.bin | $(BUILD_DIR)
+$(BUILD_DIR)/rust: $(R) rust/Cargo.toml rust/Cargo.lock rust/.cargo/config.toml rust/build.rs rust/linker.ld rust/src/*.rs build/stage_2.bin | $(BUILD_DIR)
 	cd rust && cargo build --target x86_64-unknown-none
 	cp rust/target/x86_64-unknown-none/debug/bios_bootloader $(BUILD_DIR)/rust
 
