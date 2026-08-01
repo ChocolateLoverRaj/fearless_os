@@ -35,6 +35,6 @@ impl Log for Logger {
 }
 
 pub fn init(int_10: Int10Ptr) {
-    set_max_level(log::LevelFilter::Trace);
+    set_max_level(log::LevelFilter::Info);
     set_logger(LOGGER.call_once(|| Logger { int_10 })).unwrap();
 }

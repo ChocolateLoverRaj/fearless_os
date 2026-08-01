@@ -355,6 +355,34 @@ VesaGetControllerInfoReal:
         ret
 
 [BITS 64]
+VesaGetModeInfo:
+        mov ax, VesaGetModeInfoReal
+        jmp CallReal
+
+[BITS 16]
+VesaGetModeInfoReal:
+        mov ax, 0x4f01
+        int 0x10
+        mov [Buffer], ax
+        ret
+
+[BITS 64]
+VesaSetMode:
+        mov ax, VesaSetModeReal
+        jmp CallReal
+
+[BITS 16]
+VesaSetModeReal:
+        mov ax, 0x4f02
+        mov bx, dx
+        push es
+        mov es, si
+        int 0x10
+        pop es
+        mov [Buffer], ax
+        ret
+
+[BITS 64]
 ALIGN 2
 Table:
     .Int10:
@@ -365,6 +393,10 @@ Table:
         dw ExtendedRead
     .VesaGetControllerInfo:
         dw VesaGetControllerInfo
+    .VesaGetModeInfo:
+        dw VesaGetModeInfo
+    .VesaSetMode:
+        dw VesaSetMode
     .Disk:
         db 0
     .Padding:

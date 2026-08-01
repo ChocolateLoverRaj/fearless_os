@@ -1,15 +1,10 @@
-use core::{
-    arch::naked_asm,
-    mem,
-    num::NonZero,
-    panic::PanicInfo,
-    ptr::{self, addr_of, addr_of_mut},
-};
+pub mod vesa;
 
-use zerocopy::{
-    FromBytes, FromZeros, Immutable, IntoBytes, TryFromBytes, transmute, transmute_mut,
-    try_transmute,
-};
+use core::{mem, num::NonZero, ptr::addr_of_mut};
+
+use zerocopy::{FromBytes, IntoBytes, TryFromBytes, transmute, try_transmute};
+
+use crate::bios::vesa::{VesaGetControllerInfoPtr, VesaGetModeInfoPtr, VesaSetModePtr};
 
 type Int10 = extern "C" fn(u8);
 
@@ -163,84 +158,14 @@ impl ExtendedReadPtr {
     }
 }
 
-pub struct VesaGetControllerInfoPtr(u16);
-
-#[derive(Debug, Clone, Copy)]
-pub enum VesaGetControllerInfoError {
-    InvalidAx(u16),
-    InvalidSignature([u8; 4]),
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Immutable)]
-pub struct VbeInfoBlock {
-    pub vbe_signature: [u8; 4],
-    pub vbe_version: [u8; 2],
-    pub oem_str_offset: u16,
-    pub oem_str_segment: u16,
-    pub capabilities: [u8; 4],
-    pub video_modes_offset: u16,
-    pub video_modes_segment: u16,
-    /// # of 64 KiB blocks
-    pub total_memory: u16,
-    pub reserved: [u8; 492],
-}
-
-impl VesaGetControllerInfoPtr {
-    pub fn call<'a>(
-        &self,
-        vbe_info_block: &'a mut VbeInfoBlock,
-    ) -> Result<&'a mut VbeInfoBlock, VesaGetControllerInfoError> {
-        type F = unsafe extern "C" fn(u16) -> u16;
-        let f = unsafe { mem::transmute::<_, F>(self.0 as usize) };
-        let ax = unsafe { f(ptr::from_mut(vbe_info_block).addr().try_into().unwrap()) };
-        if ax != 0x004f {
-            return Err(VesaGetControllerInfoError::InvalidAx(ax));
-        }
-        if &vbe_info_block.vbe_signature != b"VESA" {
-            return Err(VesaGetControllerInfoError::InvalidSignature(
-                vbe_info_block.vbe_signature,
-            ));
-        }
-        Ok(vbe_info_block)
-    }
-}
-
-pub struct VideoModesIterator {
-    pointer: *mut u16,
-}
-
-impl VideoModesIterator {
-    pub unsafe fn new(vbe_info_block: &VbeInfoBlock) -> Self {
-        Self {
-            pointer: usize::try_from(
-                u32::from(vbe_info_block.video_modes_segment) * 16
-                    + u32::from(vbe_info_block.video_modes_offset),
-            )
-            .unwrap() as *mut u16,
-        }
-    }
-}
-
-impl Iterator for VideoModesIterator {
-    type Item = u16;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let video_mode = unsafe { self.pointer.read() };
-        if video_mode == 0xffff {
-            return None;
-        }
-        self.pointer = (self.pointer.addr() + size_of::<u16>()) as *mut u16;
-        Some(video_mode)
-    }
-}
-
 #[repr(C)]
 pub struct BootloaderTable {
     pub int_10: Int10Ptr,
     pub int_15: Int15Ptr,
     pub extended_read: ExtendedReadPtr,
     pub vesa_get_controller_info: VesaGetControllerInfoPtr,
+    pub vesa_get_mode_info: VesaGetModeInfoPtr,
+    pub vesa_set_mode: VesaSetModePtr,
     pub disk: u8,
     _padding: u8,
 }
