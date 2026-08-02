@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+common = { version = "0.1.0", path = "../common" }
 elf = "0.8.0"
 gptman = "3.1.1"
 mbrman = "0.6.1"

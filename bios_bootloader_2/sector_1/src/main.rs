@@ -1,7 +1,14 @@
 #![no_std]
 #![no_main]
+mod bios;
+mod logger;
+mod writer_with_cr;
 
 use core::{arch::naked_asm, panic::PanicInfo};
+
+use x86_64::instructions::hlt;
+
+use crate::bios::MemoryIterator;
 
 unsafe extern "C" {
     static __bss_start: *const u8;
@@ -28,25 +35,22 @@ unsafe extern "C" fn _start() {
     )
 }
 
-unsafe extern "C" fn rust_start() -> ! {
-    for c in b"HEllo from Rust\r\nHello again!" {
-        int_10(*c);
+unsafe extern "C" fn rust_start(_: usize, _: usize, dl: u8) -> ! {
+    logger::init();
+    log::info!("Hello from small Rust. DL={dl:#X}.");
+    for m in MemoryIterator::default() {
+        let m = m.unwrap();
+        log::info!("Memory entry: {:#X?}", m);
     }
-    loop {}
-}
-
-#[unsafe(naked)]
-extern "C" fn int_10(char: u8) {
-    naked_asm!(
-        "
-        push 0x10
-        push 0x9000
-        retfq
-        "
-    )
+    loop {
+        hlt();
+    }
 }
 
 #[panic_handler]
-fn panic_handler(_panic_info: &PanicInfo) -> ! {
-    loop {}
+fn panic_handler(panic_info: &PanicInfo) -> ! {
+    log::error!("{panic_info}");
+    loop {
+        hlt();
+    }
 }

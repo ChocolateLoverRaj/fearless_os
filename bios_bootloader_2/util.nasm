@@ -1,5 +1,5 @@
 [map all build/util.map]
-ORG 0x9000
+ORG SELF_ADDR
 
 EFER equ 0xC0000080
 LME equ 1 << 8
@@ -7,6 +7,13 @@ LME equ 1 << 8
 PE equ 1 << 0
 PG equ 1 << 31
 
+%macro ENTER_COMPAT 1
+    push 0x10
+    push %1
+    retfq
+%endmacro
+
+; Clobbers ax
 %macro ENTER_REAL 1
     cli
 
@@ -51,7 +58,7 @@ PG equ 1 << 31
     jmp %1
 %endmacro
 
-
+; Clobbers ax
 %macro EXIT_REAL 1
     cli
 
@@ -63,6 +70,14 @@ PG equ 1 << 31
     jmp 0x8:%1
 %endmacro
 
+table:
+    dq int_10_long
+    dq int_15_long
+
+ALIGN 16
+[BITS 64]
+int_10_long:
+    ENTER_COMPAT int_10_compat
 [BITS 32]
 int_10_compat:
     ENTER_REAL int_10_real
@@ -74,6 +89,36 @@ int_10_real:
     EXIT_REAL int_10_done
 [BITS 64]
 int_10_done:
+    ret
+
+ALIGN 16
+[BITS 64]
+int_15_long:
+    ENTER_COMPAT int_15_compat
+[BITS 32]
+int_15_compat:
+    push si
+    ENTER_REAL int_15_real
+[BITS 16]
+int_15_real:
+    pop es
+    mov ebx, edx
+    mov edx, 0x534D4150
+    mov eax, 0xE820
+    mov ecx, 24
+    int 0x15
+    ; outputs: eax, ebx, carry flag
+    ; Put eax and ebx onto the stack
+    push ebx
+    push eax
+    ; put carry flag into dl
+    setc dl
+    EXIT_REAL int_15_done
+[BITS 64]
+int_15_done:
+    ; Put eax in lower 32 bits of rax and ebx in upper 32 bits
+    pop rax
+    ; Rdx will have the dl already
     ret
 
 ALIGN 4

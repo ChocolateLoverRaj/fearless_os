@@ -2,13 +2,12 @@ ORG 0x7C00
 BITS 16
 
 SELF_ADDR equ 0x7C00
-;INT_15_BUFFER_ADDR equ SELF_ADDR - 24
 ;NEXT_STAGE_MEM_LEN equ <external>
 ;NEXT_STAGE_FILE_LEN equ <external>
-PAGE_TABLE_256T_ADDR equ 0x5000
-PAGE_TABLE_512G_ADDR equ 0x6000
-PAGE_TABLE_1G_ADDR equ 0x8000
-NEXT_STAGE_ADDR equ 0x9000
+;PAGE_TABLE_256T_ADDR equ <external>
+;PAGE_TABLE_512G_ADDR equ <external>
+;PAGE_TABLE_1G_ADDR equ <external>
+;NEXT_STAGE_ADDR equ <external>
 ;NEXT_STAGE_JMP_ADDR equ <external>
 KIB_NEEDED equ (NEXT_STAGE_ADDR + NEXT_STAGE_MEM_LEN + 0x400 - 1) / 0x400
 
@@ -25,8 +24,6 @@ after_reload_cs:
     mov sp, start
     mov ds, si
     mov es, si
-    mov fs, si
-    mov gs, si
     ; It's okay for code after this to be interrupted
     sti
 
@@ -38,6 +35,29 @@ after_reload_cs:
     add [buffer.starting_lba], ebx
     adc [buffer.starting_lba + 0x4], ecx
 
+    push dx
+
+    ; Check if there is enough low memory
+    int 0x12
+    jc error
+    cmp ax, KIB_NEEDED
+    jl error
+
+    ; Query A20 gate support
+    mov ax, 0x2403
+    int 0x15
+    ; If carry, not support
+    jc error
+    ; If ah = 0, not supported
+    test ah, ah
+    jnz error
+    ; Activate A20 gate
+    mov ax, 0x2401
+    int 0x15
+    jc error
+    test ah, ah
+    jnz error
+
     ; Make sure the 0x42 extension exists
     mov ah, 0x41
     mov bx, 0x55AA
@@ -45,6 +65,53 @@ after_reload_cs:
     jc error
     test cx, 1 << 2
     jz error
+
+read:
+    ; ecx = sectors left to read
+    mov ecx, (NEXT_STAGE_FILE_LEN + 0x200 - 1) / 0x200
+.loop:
+    test ecx, ecx
+    jz .done
+    mov eax, ecx
+    ; now eax = sectors to read
+    movzx esi, word [buffer.dest_offset]
+    shr esi, 9
+    mov ebx, 128
+    sub ebx, esi
+    ; now ebx = max sectors until we hit 64 KiB boundary
+    cmp eax, ebx
+    jbe .within_boundary
+    mov eax, ebx
+.within_boundary:
+    ; At this point eax = sectors to read (max 128)
+    cmp eax, 127
+    jbe .small_enough
+    mov eax, 127
+.small_enough:
+    ; At this point, eax = sectors to read (max 127)
+    mov [buffer.transfer_count], al
+    mov si, buffer
+    push eax
+    mov ah, 0x42
+    int 0x13
+    jc error
+    pop eax
+
+    ; Update sectors left to read
+    sub ecx, eax
+
+    ; Advance the starting LBA
+    add [buffer.starting_lba], eax
+    adc dword [buffer.starting_lba + 0x4], 0
+    ; Advance the dest offset
+    shl ax, 9
+    add [buffer.dest_offset], ax
+    ; Advance the dest segment if needed
+    jnc .after_advance_segment
+    add word [buffer.dest_segment], 0x1000
+.after_advance_segment:
+    jmp .loop
+.done:
 
     ; Check whether long mode is supported or not
     ; Check whether CPUID is supported or not.
@@ -67,8 +134,6 @@ after_reload_cs:
     test eax, 0x200000
     jz error
     ; CpuId is supported.
-    ; Save dl becuase cpuid clobbers dl
-    push dx
     ; Use this CPUID to check the highest CPUID function implemented
     mov eax, 0x80000000
     cpuid
@@ -81,27 +146,6 @@ after_reload_cs:
     ; Bit 29 is long mode
     test edx, 1 << 29
     jz error
-
-    ; Query A20 gate support
-    mov ax, 0x2403
-    int 0x15
-    ; If carry, not support
-    jc error
-    ; If ah = 0, not supported
-    test ah, ah
-    jnz error
-    ; Activate A20 gate
-    mov ax, 0x2401
-    int 0x15
-    jc error
-    test ah, ah
-    jnz error
-
-    ; Check if there is enough low memory
-    int 0x12
-    jc error
-    cmp ax, KIB_NEEDED
-    jl error
 
 ;    ; Find memory to put the next stage
 ;.loop:
@@ -121,13 +165,6 @@ after_reload_cs:
 ;    cmp [INT_15_BUFFER_ADDR + 0xC], 0
 ;   jz .loop
 ;.found_mem:
-
-    ; Read
-    mov si, buffer
-    mov ah, 0x42
-    pop dx
-    int 0x13
-    jc error
 
     ; Load the GDT and IDT, located in stage_1.asm, and part of the first sector
     lgdt [gdt_pointer]
@@ -161,8 +198,10 @@ after_reload_cs:
     mov cx, 0x7FE
     rep stosw
 
+create_page_table_1g:
     ; Create the next level page table with entries mapping 2 MiB pages
-    mov di, PAGE_TABLE_1G_ADDR
+    ; di already at target
+    ; mov di, PAGE_TABLE_1G_ADDR
     mov cx, 512
     xor ebx, ebx
 .loop:
@@ -228,7 +267,7 @@ buffer:
         dw NEXT_STAGE_ADDR
     .dest_segment:
         ; Destination segment
-        dw 0x0
+        dw 0
     .starting_lba:
         ; Starting LBA (64 bits)
         dq 1
@@ -274,4 +313,5 @@ long_mode:
     dec rdi
     ; We don't have a valid IDT
     cli
+    pop dx
     jmp NEXT_STAGE_JMP_ADDR

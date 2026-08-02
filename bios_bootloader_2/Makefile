@@ -20,23 +20,20 @@ $(BUILD_DIR)/sector_1: $(BUILD_DIR)/util.bin | $(BUILD_DIR)
 	cd sector_1 && cargo build --target x86_64-unknown-none
 	ln -sf ../sector_1/target/x86_64-unknown-none/debug/sector_1 $(BUILD_DIR)/sector_1
 
-$(BUILD_DIR)/util.bin $(BUILD_DIR)/util.lst $(BUILD_DIR)/util.map : util.nasm | $(BUILD_DIR)
-	nasm util.nasm -f bin -l $(BUILD_DIR)/util.lst -o $(BUILD_DIR)/util.bin
-
-.PHONY: $(BUILD_DIR)/build_sector_0
-$(BUILD_DIR)/build_sector_0: | $(BUILD_DIR)
-	cd scripts && cargo build --bin sector_0 && cd ..
+.PHONY: build_scripts
+build_scripts: | $(BUILD_DIR)
+	cd scripts && cargo build && cd ..
 	ln -sf ../scripts/target/debug/sector_0 $(BUILD_DIR)/build_sector_0
+	ln -sf ../scripts/target/debug/disk $(BUILD_DIR)/build_disk
+	ln -sf ../scripts/target/debug/build_util $(BUILD_DIR)/build_util
 
-$(BUILD_DIR)/sector_0.bin $(BUILD_DIR)/sector_0.lst: sector_0.nasm $(BUILD_DIR)/build_sector_0 $(BUILD_DIR)/sector_1 $(BUILD_DIR)/util.bin | $(BUILD_DIR)
+$(BUILD_DIR)/util.bin $(BUILD_DIR)/util.lst $(BUILD_DIR)/util.map: build_scripts util.nasm | $(BUILD_DIR)
+	$(BUILD_DIR)/build_util
+
+$(BUILD_DIR)/sector_0.bin $(BUILD_DIR)/sector_0.lst: build_scripts sector_0.nasm $(BUILD_DIR)/sector_1 $(BUILD_DIR)/util.bin | $(BUILD_DIR)
 	$(BUILD_DIR)/build_sector_0
 
-.PHONY: $(BUILD_DIR)/build_disk
-$(BUILD_DIR)/build_disk: | $(BUILD_DIR)
-	cd scripts && cargo build --bin disk && cd ..
-	ln -sf ../scripts/target/debug/disk $(BUILD_DIR)/build_disk
-
-$(BUILD_DIR)/disk.img: $(BUILD_DIR)/disk_sector_0.bin $(BUILD_DIR)/sector_0.bin $(BUILD_DIR)/sector_1.bin $(BUILD_DIR)/build_disk $(BUILD_DIR)/util.bin | $(BUILD_DIR)
+$(BUILD_DIR)/disk.img: build_scripts $(BUILD_DIR)/disk_sector_0.bin $(BUILD_DIR)/sector_0.bin $(BUILD_DIR)/sector_1.bin $(BUILD_DIR)/util.bin | $(BUILD_DIR)
 	$(BUILD_DIR)/build_disk
 
 run: $(BUILD_DIR)/disk.img
