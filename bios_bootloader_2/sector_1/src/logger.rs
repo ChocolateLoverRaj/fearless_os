@@ -1,13 +1,12 @@
 use core::fmt::Write;
 
 use log::{Log, max_level, set_logger, set_max_level};
-use spin::Once;
 
 use crate::{bios::int_10, writer_with_cr::WriterWithCr};
 
 struct Logger;
 
-static LOGGER: Once<Logger> = Once::new();
+static LOGGER: Logger = Logger;
 
 impl Log for Logger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
@@ -34,5 +33,5 @@ impl Log for Logger {
 
 pub fn init() {
     set_max_level(log::LevelFilter::Info);
-    set_logger(LOGGER.call_once(|| Logger)).unwrap();
+    set_logger(&LOGGER).unwrap();
 }

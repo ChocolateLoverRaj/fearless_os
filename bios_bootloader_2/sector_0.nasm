@@ -10,6 +10,7 @@ SELF_ADDR equ 0x7C00
 ;NEXT_STAGE_ADDR equ <external>
 ;NEXT_STAGE_JMP_ADDR equ <external>
 KIB_NEEDED equ (NEXT_STAGE_ADDR + NEXT_STAGE_MEM_LEN + 0x400 - 1) / 0x400
+SECTORS_TO_READ equ (NEXT_STAGE_FILE_LEN + 0x200 - 1) / 0x200
 
 start:
     ; Disable interrupts while setting segmetn registers
@@ -35,6 +36,8 @@ after_reload_cs:
     add [buffer.starting_lba], ebx
     adc [buffer.starting_lba + 0x4], ecx
 
+    push ecx
+    push ebx
     push dx
 
     ; Check if there is enough low memory
@@ -68,7 +71,7 @@ after_reload_cs:
 
 read:
     ; ecx = sectors left to read
-    mov ecx, (NEXT_STAGE_FILE_LEN + 0x200 - 1) / 0x200
+    mov ecx, SECTORS_TO_READ
 .loop:
     test ecx, ecx
     jz .done
@@ -213,6 +216,10 @@ create_page_table_1g:
     add ebx, 1 << 21
     loop .loop
 
+
+    ; We don't have a valid IDT for handling interrupts in long mode
+    cli
+
     ; Enable Cr4 flags for long mode
     PAE equ 1 << 5
     PGE equ 1 << 7
@@ -278,18 +285,10 @@ ALIGN 8
 gdt:
 .null:
     dq 0x0000000000000000      ; 0x00: Null Descriptor
-.code:
-    dq 0x00209A0000000000      ; 0x08: 64-bit code descriptor
-.code32:
-    dq 0x00CF9A000000FFFF      ; 0x10: 32-bit code descriptor
-.code16:
-    dq 0x000F9A000000FFFF      ; 0x18: 16-bit code segment
-.data:
-    dq 0x0000920000000000      ; 0x20: 64-bit data descriptor
-.data32:
-    dq 0x00CF92000000FFFF      ; 0x28: 32-bit data descriptor
-.data16:
-    dq 0x000092000000FFFF
+.code64:
+    dq 0x00209A0000000000
+.data64:
+    dq 0x0000920000000000
 .end:
 
 ALIGN 4
@@ -309,9 +308,6 @@ gdt_pointer:
 
 [BITS 64]
 long_mode:
-    mov rdi, [buffer.starting_lba]
-    dec rdi
-    ; We don't have a valid IDT
-    cli
     pop dx
+    pop rsi
     jmp NEXT_STAGE_JMP_ADDR
