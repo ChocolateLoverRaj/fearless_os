@@ -105,14 +105,14 @@ int_15_real:
     mov ebx, edx
     mov edx, 0x534D4150
     mov eax, 0xE820
-    mov ecx, 24
     int 0x15
-    ; outputs: eax, ebx, carry flag
+    ; outputs: eax, ebx, cl, carry flag
     ; Put eax and ebx onto the stack
     push ebx
     push eax
     ; put carry flag into dl
     setc dl
+    mov dh, cl
     EXIT_REAL int_15_done
 [BITS 64]
 int_15_done:

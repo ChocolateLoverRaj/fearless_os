@@ -60,6 +60,30 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> !
         let m = m.unwrap();
         log::info!("Memory entry: {:#X?}", m);
     }
+
+    // Find a 512 B * 127 buffer in real-mode accessible memory that we can use as a bounce buffer for reading the next stage
+    #[derive(Debug)]
+    struct UsableMem {
+        start: u64,
+        len: u64,
+    }
+    // let mut low_mem = None;
+    for m in MemoryIterator::default()
+        .map(|m| m.unwrap())
+        .filter_map(|m| {
+            if m.is_usable() {
+                Some(UsableMem {
+                    start: m.base_addr,
+                    len: m.len,
+                })
+            } else {
+                None
+            }
+        })
+    {
+        log::info!("usable mem: {m:X?}");
+    }
+
     loop {
         hlt();
     }

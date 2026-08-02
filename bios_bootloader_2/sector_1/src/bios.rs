@@ -3,6 +3,7 @@ use core::{
     ptr::{NonNull, addr_of_mut},
 };
 
+use bitbybit::bitfield;
 use common::SECTOR_1;
 use zerocopy::{FromBytes, FromZeros, TryFromBytes};
 
@@ -12,14 +13,15 @@ struct Int15RawOutput {
     eax: u32,
     ebx: u32,
     carry_flag: bool,
-    _padding: [u8; 7],
+    cl: u8,
+    _padding: [u8; 6],
 }
 
 #[repr(C)]
 struct UtilTable {
     int_10: extern "C" fn(u8),
-    /// args: di, es, ebx
-    int_15: extern "C" fn(u16, u16, u32) -> Int15RawOutput,
+    /// args: di, es, ebx, ecx
+    int_15: extern "C" fn(u16, u16, u32, u32) -> Int15RawOutput,
 }
 
 fn table() -> &'static UtilTable {
@@ -37,7 +39,7 @@ pub fn int_10(byte: u8) {
 
 #[derive(Debug, Clone, Copy, FromBytes)]
 #[repr(C)]
-pub struct Int15Data {
+pub struct Int15RawData {
     pub base_addr: u64,
     pub len: u64,
     pub _type: u64,
@@ -49,6 +51,31 @@ pub enum Int15Error {
     InvalidEax(u32),
 }
 
+#[bitfield(u32, debug)]
+pub struct AcpiExtendedAttributes {
+    #[bit(0, rw)]
+    dont_ignore: bool,
+    #[bit(1, rw)]
+    non_volatile: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Int15Data {
+    pub base_addr: u64,
+    pub len: u64,
+    pub _type: u32,
+    pub acpi_extended_attributes: Option<AcpiExtendedAttributes>,
+}
+
+impl Int15Data {
+    pub fn is_usable(&self) -> bool {
+        self._type == 0x1
+            && self
+                .acpi_extended_attributes
+                .is_none_or(|attributes| attributes.dont_ignore() && !attributes.non_volatile())
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Int15Output {
     pub data: Int15Data,
@@ -57,14 +84,14 @@ pub struct Int15Output {
 
 pub fn int_15(entry_id: u32) -> Result<Int15Output, Int15Error> {
     Ok({
-        let mut data = Int15Data::new_zeroed();
+        let mut data = Int15RawData::new_zeroed();
         let data_addr = addr_of_mut!(data).addr();
         let es = u16::try_from(data_addr / 16).unwrap_or(u16::MAX);
         let di = u16::try_from(data_addr - usize::try_from(es).unwrap() * 16)
             .expect("cannot represent stack-allocated data pointer with real-mode addressing");
         let bx = entry_id;
-        let output = (table().int_15)(di, es, bx);
-        log::info!("Called int 15");
+        let ecx = 24;
+        let output = (table().int_15)(di, es, bx, ecx);
         // let output: Int15RawOutput = try_transmute!(output).unwrap();
         if output.carry_flag {
             return Err(Int15Error::CarryFlagSet);
@@ -73,7 +100,18 @@ pub fn int_15(entry_id: u32) -> Result<Int15Output, Int15Error> {
             return Err(Int15Error::InvalidEax(output.eax));
         }
         Int15Output {
-            data,
+            data: Int15Data {
+                base_addr: data.base_addr,
+                len: data.len,
+                _type: data._type as u32,
+                acpi_extended_attributes: match output.cl {
+                    20 => None,
+                    24 => Some(AcpiExtendedAttributes::new_with_raw_value(
+                        (data._type >> 32) as u32,
+                    )),
+                    cl => panic!("Unexpected cl: {cl}"),
+                },
+            },
             next_entry_index: NonZero::new(output.ebx),
         }
     })
