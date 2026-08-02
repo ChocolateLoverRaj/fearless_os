@@ -64,10 +64,14 @@ fn main() {
 
     // Create the partition
     disk.seek(SeekFrom::Start(starting_lba * 512)).unwrap();
-    let stage_0 = fs::read("build/sector_0.bin").unwrap();
-    disk.write_all(&stage_0).unwrap();
+    let partition_sector_0 = fs::read("build/sector_0.bin").unwrap();
+    disk.write_all(&partition_sector_0).unwrap();
     disk.seek(SeekFrom::Start((starting_lba + 1) * 512))
         .unwrap();
-    let stage_1 = fs::read("build/sector_1.bin").unwrap();
-    disk.write_all(&stage_1).unwrap();
+    let util = fs::read("build/util.bin").unwrap();
+    disk.write_all(&util).unwrap();
+    let padding = 16 - (util.len() % 16);
+    disk.seek_relative(padding.try_into().unwrap()).unwrap();
+    let partition_sector_1 = fs::read("build/sector_1.bin").unwrap();
+    disk.write_all(&partition_sector_1).unwrap();
 }

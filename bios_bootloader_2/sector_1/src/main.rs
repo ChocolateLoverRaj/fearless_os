@@ -29,10 +29,24 @@ unsafe extern "C" fn _start() {
 }
 
 unsafe extern "C" fn rust_start() -> ! {
+    for c in b"HEllo from Rust\r\nHello again!" {
+        int_10(*c);
+    }
     loop {}
 }
 
+#[unsafe(naked)]
+extern "C" fn int_10(char: u8) {
+    naked_asm!(
+        "
+        push 0x10
+        push 0x9000
+        retfq
+        "
+    )
+}
+
 #[panic_handler]
-fn panic_handler(panic_info: &PanicInfo) -> ! {
+fn panic_handler(_panic_info: &PanicInfo) -> ! {
     loop {}
 }

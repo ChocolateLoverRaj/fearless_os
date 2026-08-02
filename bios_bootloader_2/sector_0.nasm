@@ -234,17 +234,23 @@ buffer:
         dq 1
     .end:
 
+
 ALIGN 8
 gdt:
-; 0x00: Null descriptor
 .null:
-    dq 0x0000000000000000
-; 0x08: 64-bit code
-.code64:
-    dq 0x00209A0000000000
-; 0x10: 64-bit data
-.data64:
-    dq 0x0000920000000000
+    dq 0x0000000000000000      ; 0x00: Null Descriptor
+.code:
+    dq 0x00209A0000000000      ; 0x08: 64-bit code descriptor
+.code32:
+    dq 0x00CF9A000000FFFF      ; 0x10: 32-bit code descriptor
+.code16:
+    dq 0x000F9A000000FFFF      ; 0x18: 16-bit code segment
+.data:
+    dq 0x0000920000000000      ; 0x20: 64-bit data descriptor
+.data32:
+    dq 0x00CF92000000FFFF      ; 0x28: 32-bit data descriptor
+.data16:
+    dq 0x000092000000FFFF
 .end:
 
 ALIGN 4
@@ -268,4 +274,4 @@ long_mode:
     dec rdi
     ; We don't have a valid IDT
     cli
-    jmp NEXT_STAGE_ADDR
+    jmp NEXT_STAGE_JMP_ADDR

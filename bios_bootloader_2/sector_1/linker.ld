@@ -1,6 +1,6 @@
 SECTIONS
 {
-    . = 0x9000;
+    . = LOAD_ADDR;
     __start = .;
 
     .text :
