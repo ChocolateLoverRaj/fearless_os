@@ -38,6 +38,8 @@ fn main() {
         .arg(format!("-DNEXT_STAGE_JMP_ADDR={jmp_addr:#X}"))
         .arg("-f")
         .arg("bin")
+        .arg("-l")
+        .arg("build/sector_0.lst")
         .arg("-o")
         .arg("build/sector_0.bin")
         .stderr(Stdio::inherit())

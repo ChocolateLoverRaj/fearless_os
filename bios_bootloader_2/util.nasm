@@ -1,3 +1,4 @@
+[map all build/util.map]
 ORG 0x9000
 
 EFER equ 0xC0000080
@@ -6,40 +7,39 @@ LME equ 1 << 8
 PE equ 1 << 0
 PG equ 1 << 31
 
-[BITS 32]
-int_10_compat:
-    ; Turn off paging
+%macro ENTER_REAL 1
+    cli
+
+    ; Disable paging
     mov eax, cr0
     and eax, ~PG
     mov cr0, eax
 
-    ; Far jump to 16-bit protected mode
-    jmp 0x18:int_10_protected_16
+[BITS 32]
+    jmp 0x18:%%protected_16
 
 [BITS 16]
-int_10_protected_16:
-    ; Load data segment selectors with 16-bit indexes
-    ; 0x30 is the offset in the GDT of the 16-bit data descriptor
+%%protected_16:
+    ; 16-bit protected-mode data selector
     mov ax, 0x30
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
+    mov ss, ax
 
-    ; Load real mode IDT
+    ; Real-mode IVT
     lidt [real_mode_idt]
 
-    ; Disable protected mode
+    ; Leave protected mode
     mov eax, cr0
     and eax, ~PE
     mov cr0, eax
 
-    ; Far jump to real mode
-    jmp 0x0:int_10_real
+    ; Reload real-mode segments
+    jmp 0:%%real
 
-[BITS 16]
-int_10_real:
-    ; Reload data segmetn registers with real mode values
+%%real:
     xor ax, ax
     mov ds, ax
     mov es, ax
@@ -47,25 +47,33 @@ int_10_real:
     mov gs, ax
     mov ss, ax
 
-    ; We can re-enable interrupts now
-    ; We should
     sti
+    jmp %1
+%endmacro
 
-    mov ax, di
-    mov ah, 0x0E
-    int 0x10
 
-    ; Enable protection and paging in Cr0
+%macro EXIT_REAL 1
+    cli
+
+    ; Enter protected mode
     mov eax, cr0
     or eax, PE | PG
     mov cr0, eax
 
-    ; Jump to 64-bit code
-    jmp 0x8:int_10_ret
+    jmp 0x8:%1
+%endmacro
 
+[BITS 32]
+int_10_compat:
+    ENTER_REAL int_10_real
+[BITS 16]
+int_10_real:
+    mov ax, di
+    mov ah, 0x0E
+    int 0x10
+    EXIT_REAL int_10_done
 [BITS 64]
-int_10_ret:
-    cli
+int_10_done:
     ret
 
 ALIGN 4
