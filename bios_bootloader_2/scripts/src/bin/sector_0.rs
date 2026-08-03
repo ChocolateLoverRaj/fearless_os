@@ -13,7 +13,6 @@ fn main() {
     let mut elf =
         ElfStream::<LittleEndian, _>::open_stream(File::open("build/sector_1").unwrap()).unwrap();
     let (symbol_table, string_table) = elf.symbol_table().unwrap().unwrap();
-
     let find_symbol = |symbol: &str| {
         symbol_table.iter().find_map(|s| {
             if let Ok(str) = string_table.get(s.st_name as usize)

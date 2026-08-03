@@ -20,3 +20,4 @@ zerocopy = { version = "0.8.55", features = ["derive"] }
 
 [build-dependencies]
 common = { version = "0.1.0", path = "../common" }
+elf = "0.8.0"

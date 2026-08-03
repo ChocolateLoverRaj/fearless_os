@@ -7,8 +7,15 @@ use gptman::GPT;
 use mbrman::{BOOT_ACTIVE, CHS, MBR};
 
 fn main() {
+    let util_len = fs::metadata("build/util.bin").unwrap().len();
     let sector_1_len = fs::metadata("build/sector_1.bin").unwrap().len();
-    let partition_sectors_count = 1 + (sector_1_len + 512 - 1) / 512;
+    let big_stage_len = fs::metadata("build/big_stage.bin").unwrap().len();
+    let partition_len = (((512 + util_len).next_multiple_of(16) + sector_1_len)
+        .next_multiple_of(512)
+        + big_stage_len)
+        .next_multiple_of(512);
+
+    let partition_sectors_count = partition_len / 512;
     let disk_sectors_count = (1 + 1 + 32 + partition_sectors_count + 32 + 1).max(0x800);
     let disk_len = disk_sectors_count * 512;
     let mut disk = OpenOptions::new()
@@ -63,16 +70,22 @@ fn main() {
     mbr.write_into(&mut disk).unwrap();
 
     // Create the partition
-    disk.seek(SeekFrom::Start(starting_lba * 512)).unwrap();
+    let partition_offset = starting_lba * 512;
+    disk.seek(SeekFrom::Start(partition_offset)).unwrap();
     let partition_sector_0 = fs::read("build/sector_0.bin").unwrap();
     assert!(partition_sector_0.len() < 512);
     disk.write_all(&partition_sector_0).unwrap();
-    disk.seek(SeekFrom::Start((starting_lba + 1) * 512))
-        .unwrap();
+    let util_offset = partition_offset + 512;
+    disk.seek(SeekFrom::Start(util_offset)).unwrap();
     let util = fs::read("build/util.bin").unwrap();
     disk.write_all(&util).unwrap();
-    let padding = util.len().next_multiple_of(16) - util.len();
-    disk.seek_relative(padding.try_into().unwrap()).unwrap();
+    let sector_1_offset = (util_offset + u64::try_from(util.len()).unwrap()).next_multiple_of(16);
+    disk.seek(SeekFrom::Start(sector_1_offset)).unwrap();
     let partition_sector_1 = fs::read("build/sector_1.bin").unwrap();
     disk.write_all(&partition_sector_1).unwrap();
+    let big_stage_offset =
+        (sector_1_offset + u64::try_from(sector_1_len).unwrap()).next_multiple_of(512);
+    disk.seek(SeekFrom::Start(big_stage_offset)).unwrap();
+    let big_stage = fs::read("build/big_stage.bin").unwrap();
+    disk.write_all(&big_stage).unwrap();
 }

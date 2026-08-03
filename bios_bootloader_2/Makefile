@@ -11,8 +11,17 @@ $(BUILD_DIR):
 $(BUILD_DIR)/disk_sector_0.bin: | $(BUILD_DIR)
 	nasm ../mbr_bootloader/bootloader.nasm -DMAGIC=0xA786B9FC -f bin -o $(BUILD_DIR)/disk_sector_0.bin
 
+.PHONY: $(BUILD_DIR)/big_stage.bin
+$(BUILD_DIR)/big_stage.bin: | $(BUILD_DIR)
+	cd big_stage && cargo objcopy --target x86_64-unknown-none -- -O binary ../$(BUILD_DIR)/big_stage.bin
+
+.PHONY: $(BUILD_DIR)/big_stage
+$(BUILD_DIR)/big_stage: | $(BUILD_DIR)
+	cd big_stage && cargo build --target x86_64-unknown-none
+	ln -sf ../big_stage/target/x86_64-unknown-none/debug/big_stage $(BUILD_DIR)/big_stage
+
 .PHONY: $(BUILD_DIR)/sector_1.bin
-$(BUILD_DIR)/sector_1.bin: $(BUILD_DIR)/util.bin | $(BUILD_DIR)
+$(BUILD_DIR)/sector_1.bin: $(BUILD_DIR)/util.bin $(BUILD_DIR)/big_stage | $(BUILD_DIR)
 	cd sector_1 && cargo objcopy --target x86_64-unknown-none -- -O binary ../$(BUILD_DIR)/sector_1.bin
 
 .PHONY: $(BUILD_DIR)/sector_1
