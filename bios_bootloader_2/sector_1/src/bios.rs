@@ -1,14 +1,14 @@
 use core::{
     num::NonZero,
-    ptr::{NonNull, addr_of_mut},
+    ptr::{NonNull, addr_of, addr_of_mut},
 };
 
 use bitbybit::bitfield;
 use common::SECTOR_1;
-use zerocopy::{FromBytes, FromZeros, TryFromBytes};
+use zerocopy::{FromBytes, FromZeros};
 
 #[repr(C)]
-#[derive(Debug, TryFromBytes)]
+#[derive(Debug, Clone, Copy)]
 struct Int15RawOutput {
     eax: u32,
     ebx: u32,
@@ -18,10 +18,19 @@ struct Int15RawOutput {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct ExtendedReadRawOutput {
+    carry_flag: bool,
+    error: Option<NonZero<u8>>,
+}
+
+#[repr(C)]
 struct UtilTable {
     int_10: extern "C" fn(u8),
     /// args: di, es, ebx, ecx
     int_15: extern "C" fn(u16, u16, u32, u32) -> Int15RawOutput,
+    /// args: ds, si, dl
+    extended_read: extern "C" fn(u16, u16, u8) -> ExtendedReadRawOutput,
 }
 
 fn table() -> &'static UtilTable {
@@ -85,10 +94,10 @@ pub struct Int15Output {
 pub fn int_15(entry_id: u32) -> Result<Int15Output, Int15Error> {
     Ok({
         let mut data = Int15RawData::new_zeroed();
-        let data_addr = addr_of_mut!(data).addr();
-        let es = u16::try_from(data_addr / 16).unwrap_or(u16::MAX);
-        let di = u16::try_from(data_addr - usize::try_from(es).unwrap() * 16)
-            .expect("cannot represent stack-allocated data pointer with real-mode addressing");
+        let data_addr =
+            RealModeAddr::try_from(u32::try_from(addr_of_mut!(data).addr()).unwrap()).unwrap();
+        let es = data_addr.segment;
+        let di = data_addr.offset;
         let bx = entry_id;
         let ecx = 24;
         let output = (table().int_15)(di, es, bx, ecx);
@@ -145,4 +154,71 @@ impl Iterator for MemoryIterator {
             })()
         })
     }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct RealModeAddr {
+    offset: u16,
+    segment: u16,
+}
+
+#[derive(Debug)]
+pub struct NotAddressableFromRealMode;
+
+impl TryFrom<u32> for RealModeAddr {
+    type Error = NotAddressableFromRealMode;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        Ok({
+            let segment = u16::try_from(value / 16).unwrap_or(u16::MAX);
+            let offset = u16::try_from(value - u32::from(segment) * 16)
+                .map_err(|_| NotAddressableFromRealMode)?;
+            Self { segment, offset }
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ExtendedReadError {
+    /// Technically this should always be `Some` but if the BIOS sets the carry flag while returning with ah = 0, this would be none.
+    pub ah: Option<NonZero<u8>>,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct DeviceAddressPacket {
+    packet_size: u8,
+    _reserved_0: u8,
+    blocks_to_transfer: u8,
+    _reserved_1: u8,
+    host_buffer_address: RealModeAddr,
+    starting_lba: u64,
+}
+
+/// # Safety
+/// Overwrites data at the dest addr.
+pub unsafe fn extended_read(
+    disk: u8,
+    src_lba: u64,
+    dest_addr: RealModeAddr,
+    blocks_to_transfer: u8,
+) -> Result<(), ExtendedReadError> {
+    assert!(blocks_to_transfer <= 127);
+    let dap = DeviceAddressPacket {
+        packet_size: size_of::<DeviceAddressPacket>().try_into().unwrap(),
+        _reserved_0: 0,
+        blocks_to_transfer,
+        _reserved_1: 0,
+        host_buffer_address: dest_addr,
+        starting_lba: src_lba,
+    };
+    log::info!("DAP: {dap:#X?}");
+    let dap_addr = RealModeAddr::try_from(u32::try_from(addr_of!(dap).addr()).unwrap()).unwrap();
+    let ExtendedReadRawOutput { carry_flag, error } =
+        (table().extended_read)(dap_addr.segment, dap_addr.offset, disk);
+    if carry_flag || error.is_some() {
+        return Err(ExtendedReadError { ah: error });
+    }
+    Ok(())
 }

@@ -7,22 +7,21 @@ LME equ 1 << 8
 PE equ 1 << 0
 PG equ 1 << 31
 
-%macro ENTER_COMPAT 1
-    push 0x10
-    push %1
-    retfq
-%endmacro
-
 ; Clobbers ax
 %macro ENTER_REAL 1
     cli
 
+    push 0x10
+    push %%compat
+    retfq
+
+[BITS 32]
+%%compat:
     ; Disable paging
     mov eax, cr0
     and eax, ~PG
     mov cr0, eax
 
-[BITS 32]
     jmp 0x18:%%protected_16
 
 [BITS 16]
@@ -73,13 +72,11 @@ PG equ 1 << 31
 table:
     dq int_10_long
     dq int_15_long
+    dq extended_read_long
 
 ALIGN 16
 [BITS 64]
 int_10_long:
-    ENTER_COMPAT int_10_compat
-[BITS 32]
-int_10_compat:
     ENTER_REAL int_10_real
 [BITS 16]
 int_10_real:
@@ -94,9 +91,6 @@ int_10_done:
 ALIGN 16
 [BITS 64]
 int_15_long:
-    ENTER_COMPAT int_15_compat
-[BITS 32]
-int_15_compat:
     push si
     ENTER_REAL int_15_real
 [BITS 16]
@@ -119,6 +113,24 @@ int_15_done:
     ; Put eax in lower 32 bits of rax and ebx in upper 32 bits
     pop rax
     ; Rdx will have the dl already
+    ret
+
+ALIGN 16
+[BITS 64]
+extended_read_long:
+    push di
+    ENTER_REAL extended_read_real
+[BITS 16]
+extended_read_real:
+    pop ds
+    mov ah, 0x42
+    int 0x13
+    setc al
+    mov bx, ax
+    EXIT_REAL extended_read_done
+[BITS 64]
+extended_read_done:
+    mov ax, bx
     ret
 
 ALIGN 4

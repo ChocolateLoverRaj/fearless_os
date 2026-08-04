@@ -5,19 +5,32 @@ mod logger;
 mod writer_with_cr;
 
 use core::{
-    arch::naked_asm,
+    arch::{asm, naked_asm},
     cmp::{max, min},
     panic::PanicInfo,
-    ptr::addr_of,
+    ptr::{NonNull, addr_of},
 };
 
-use x86_64::{instructions::hlt, structures::gdt::GlobalDescriptorTable};
+use common::{BIG_STAGE_ADDR, SECTOR_1};
+use x86_64::{
+    PhysAddr, VirtAddr,
+    instructions::hlt,
+    registers::control::Cr3,
+    structures::{
+        gdt::GlobalDescriptorTable,
+        paging::{
+            FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame,
+            Size2MiB, Size4KiB, mapper::MapToError,
+        },
+    },
+};
 
-use crate::bios::MemoryIterator;
+use crate::bios::{MemoryIterator, RealModeAddr, extended_read};
 
 unsafe extern "C" {
     static __bss_start: *const u8;
     static __bss_u64s_to_copy: *const u8;
+    static __data_end: *const u8;
     static __bss_end: *const u8;
 }
 
@@ -58,6 +71,8 @@ static GDT: GlobalDescriptorTable = GlobalDescriptorTable::from_raw_entries(&[
     0x000092000000FFFF,
 ]);
 
+static PAGE_TABLES_MEM: [PageTable; 2] = [PageTable::new(), PageTable::new()];
+
 unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> ! {
     GDT.load();
     logger::init();
@@ -81,8 +96,7 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> !
         start: u64,
         len: u64,
     }
-    let self_stage_end = u64::try_from(addr_of!(__bss_end).addr()).unwrap();
-    let mut low_used_len = self_stage_end;
+    let mut low_used_len = u64::try_from(addr_of!(__bss_end).addr()).unwrap();
     let low_mem_end: u64 = 0xFFFF * 16 + 0x10000;
     let buffer_len = 512 * 127;
     let mut read_buffer_addr = None;
@@ -114,15 +128,11 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> !
         }
         let mut m = m.start..m.start + m.len;
         m.start = max(m.start, low_used_len);
-        // We're loading the next stage
-        m.start = m.start.next_multiple_of(16);
-        if m.is_empty() {
-            continue;
-        }
+
         // See if we can fit the next stage
         // The file part will involve copying entire blocks of 512 B
         // The mem part doesn't need to end block aligned
-        m.start = m.start.next_multiple_of(512);
+        m.start = m.start.next_multiple_of(0x200000);
         if m.is_empty() {
             continue;
         }
@@ -142,9 +152,114 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> !
         "read_buffer_addr: {read_buffer_addr:#X}, next_stage_phys_addr: {next_stage_phys_addr:#X}"
     );
 
-    loop {
-        hlt();
+    let page_table_256_t = unsafe {
+        NonNull::new(Cr3::read().0.start_address().as_u64() as *mut PageTable)
+            .unwrap()
+            .as_mut()
+    };
+    let mut page_table = unsafe { OffsetPageTable::new(page_table_256_t, VirtAddr::new(0)) };
+
+    let read_buffer_real_addr =
+        RealModeAddr::try_from(u32::try_from(read_buffer_addr).unwrap()).unwrap();
+
+    let total_sectors_to_copy = next_stage_file_len.next_multiple_of(512) / 512;
+    let starting_lba = partition_start_lba
+        + 1
+        + (u64::try_from(addr_of!(__data_end).addr())
+            .unwrap()
+            .next_multiple_of(512)
+            - u64::from(SECTOR_1))
+            / 512;
+    log::info!("starting LBA: {starting_lba:#X}");
+    let mut sectors_copied = 0;
+    while sectors_copied < total_sectors_to_copy {
+        let sectors_to_copy_this_iteration = min(total_sectors_to_copy - sectors_copied, 127);
+        unsafe {
+            extended_read(
+                dl,
+                starting_lba + sectors_copied,
+                read_buffer_real_addr,
+                sectors_to_copy_this_iteration.try_into().unwrap(),
+            )
+        }
+        .unwrap();
+
+        // Worst case is that the max 127 sectors cross a 2 MiB boundary
+        // We can ensure that the first and last page in the range are mapped
+        let first_page = Page::<Size2MiB>::containing_address(VirtAddr::new(
+            BIG_STAGE_ADDR + sectors_copied * 512,
+        ));
+        let first_frame = PhysFrame::<Size2MiB>::containing_address(PhysAddr::new(
+            next_stage_phys_addr + sectors_copied * 512,
+        ));
+        let last_page = Page::<Size2MiB>::containing_address(VirtAddr::new(
+            BIG_STAGE_ADDR + (sectors_copied + sectors_to_copy_this_iteration - 1) * 512,
+        ));
+        let last_frame = PhysFrame::<Size2MiB>::containing_address(PhysAddr::new(
+            next_stage_phys_addr + (sectors_copied + sectors_to_copy_this_iteration - 1) * 512,
+        ));
+
+        struct F {
+            frames_allocated: usize,
+        }
+        unsafe impl FrameAllocator<Size4KiB> for F {
+            fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
+                if self.frames_allocated < PAGE_TABLES_MEM.len() {
+                    let frame = core::ptr::from_ref(&PAGE_TABLES_MEM[self.frames_allocated]);
+                    let frame = PhysFrame::from_start_address(PhysAddr::new(
+                        frame.addr().try_into().unwrap(),
+                    ))
+                    .unwrap();
+                    self.frames_allocated += 1;
+                    Some(frame)
+                } else {
+                    None
+                }
+            }
+        }
+        let mut frame_allocator = F {
+            frames_allocated: 0,
+        };
+        for (page, frame) in [(first_page, first_frame), (last_page, last_frame)] {
+            log::info!("Mapping {page:#X?} to {frame:#X?}");
+            let result = unsafe {
+                page_table.map_to(
+                    page,
+                    frame,
+                    PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                    &mut frame_allocator,
+                )
+            };
+            match result {
+                Ok(_) | Err(MapToError::PageAlreadyMapped(_)) => {}
+                Err(e) => panic!("{:?}", e),
+            }
+        }
+
+        // #[repr(C, align(512))]
+        // struct Block {
+        //     bytes: [u8; 512],
+        // }
+        let src = NonNull::new(read_buffer_addr as *mut u8).unwrap();
+        let dest =
+            unsafe { NonNull::new_unchecked((BIG_STAGE_ADDR + sectors_copied * 512) as *mut u8) };
+        unsafe {
+            src.copy_to_nonoverlapping(
+                dest,
+                (sectors_to_copy_this_iteration * 512).try_into().unwrap(),
+            )
+        };
+
+        sectors_copied += sectors_to_copy_this_iteration;
     }
+
+    let b = unsafe {
+        NonNull::new(next_stage_jmp_addr as *mut [u8; 16])
+            .unwrap()
+            .as_ref()
+    };
+    log::info!("Jumping to big stage ({next_stage_jmp_addr:#X} with instructions {b:X?}");
+    unsafe { asm!("jmp {}", in(reg) next_stage_jmp_addr, options(noreturn)) };
 }
 
 #[panic_handler]
