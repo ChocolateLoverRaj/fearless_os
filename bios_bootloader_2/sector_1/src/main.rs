@@ -1,22 +1,26 @@
 #![no_std]
 #![no_main]
-mod bios;
-mod logger;
-mod writer_with_cr;
-
 use core::{
     arch::{asm, naked_asm},
     cmp::{max, min},
+    num::NonZero,
     panic::PanicInfo,
     ptr::{NonNull, addr_of},
 };
 
-use common::{BIG_STAGE_ADDR, SECTOR_1};
+use common::{
+    BIG_STAGE_ADDR, SECTOR_1,
+    big_stage_api::{self, BigStageEntryInfo},
+    bios::BiosFns,
+    logger,
+};
+use spin::Once;
 use x86_64::{
     PhysAddr, VirtAddr,
     instructions::hlt,
     registers::control::Cr3,
     structures::{
+        DescriptorTablePointer,
         gdt::GlobalDescriptorTable,
         paging::{
             FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame,
@@ -25,7 +29,7 @@ use x86_64::{
     },
 };
 
-use crate::bios::{MemoryIterator, RealModeAddr, extended_read};
+use common::bios::{MemoryIterator, RealModeAddr, extended_read};
 
 unsafe extern "C" {
     static __bss_start: *const u8;
@@ -70,12 +74,15 @@ static GDT: GlobalDescriptorTable = GlobalDescriptorTable::from_raw_entries(&[
     // Data 16
     0x000092000000FFFF,
 ]);
+static GDT_PTR: Once<DescriptorTablePointer> = Once::new();
 
+static BIOS_FNS: Once<BiosFns> = Once::new();
 static PAGE_TABLES_MEM: [PageTable; 2] = [PageTable::new(), PageTable::new()];
 
 unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> ! {
     GDT.load();
-    logger::init();
+    let bios_fns = BIOS_FNS.call_once(|| unsafe { BiosFns::new(None, None) });
+    logger::init(&bios_fns);
     log::info!("Hello from small Rust. DL={dl:#X}. Partition start LBA: {partition_start_lba:#X}.");
     for m in MemoryIterator::default() {
         let m = m.unwrap();
@@ -259,7 +266,21 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> !
             .as_ref()
     };
     log::info!("Jumping to big stage ({next_stage_jmp_addr:#X} with instructions {b:X?}");
-    unsafe { asm!("jmp {}", in(reg) next_stage_jmp_addr, options(noreturn)) };
+    let f = unsafe {
+        core::mem::transmute::<_, big_stage_api::Entry>(next_stage_jmp_addr as *const ())
+    };
+    let gdt_ptr = GDT_PTR.call_once(|| DescriptorTablePointer {
+        limit: GDT.limit(),
+        base: VirtAddr::from_ptr(GDT.entries().as_ptr()),
+    });
+    let big_stage_entry_info = BigStageEntryInfo {
+        low_used_mem_len: low_used_len,
+        big_stage_phys_start: next_stage_phys_addr,
+        low_mem_gdt_ptr_addr: core::ptr::from_ref(gdt_ptr) as u64,
+    };
+    log::info!("Passing info to next stage: {big_stage_entry_info:#X?}");
+    unsafe { f(&big_stage_entry_info) }
+    // unsafe { asm!("call {}", in(reg) next_stage_jmp_addr, options(noreturn)) };
 }
 
 #[panic_handler]

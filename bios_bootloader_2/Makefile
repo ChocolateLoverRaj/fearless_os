@@ -25,7 +25,7 @@ $(BUILD_DIR)/sector_1.bin: $(BUILD_DIR)/util.bin $(BUILD_DIR)/big_stage | $(BUIL
 	cd sector_1 && cargo objcopy --target x86_64-unknown-none -- -O binary ../$(BUILD_DIR)/sector_1.bin
 
 .PHONY: $(BUILD_DIR)/sector_1
-$(BUILD_DIR)/sector_1: $(BUILD_DIR)/util.bin | $(BUILD_DIR)
+$(BUILD_DIR)/sector_1: $(BUILD_DIR)/util.bin $(BUILD_DIR)/big_stage | $(BUILD_DIR)
 	cd sector_1 && cargo build --target x86_64-unknown-none
 	ln -sf ../sector_1/target/x86_64-unknown-none/debug/sector_1 $(BUILD_DIR)/sector_1
 
@@ -42,19 +42,19 @@ $(BUILD_DIR)/util.bin $(BUILD_DIR)/util.lst $(BUILD_DIR)/util.map: build_scripts
 $(BUILD_DIR)/sector_0.bin $(BUILD_DIR)/sector_0.lst: build_scripts sector_0.nasm $(BUILD_DIR)/sector_1 $(BUILD_DIR)/util.bin | $(BUILD_DIR)
 	$(BUILD_DIR)/build_sector_0
 
-$(BUILD_DIR)/disk.img: build_scripts $(BUILD_DIR)/disk_sector_0.bin $(BUILD_DIR)/sector_0.bin $(BUILD_DIR)/sector_1.bin $(BUILD_DIR)/util.bin | $(BUILD_DIR)
+$(BUILD_DIR)/disk.img: build_scripts $(BUILD_DIR)/disk_sector_0.bin $(BUILD_DIR)/sector_0.bin $(BUILD_DIR)/sector_1.bin $(BUILD_DIR)/util.bin $(BUILD_DIR)/big_stage.bin | $(BUILD_DIR)
 	$(BUILD_DIR)/build_disk
 
 run: $(BUILD_DIR)/disk.img
 	qemu-system-x86_64 \
-        --machine q35,accel=kvm:whpx:hvf:tcg \
+        --machine q35 -d int -D $(BUILD_DIR)/qemu.log -m 4G \
         --no-reboot \
         -drive file=$(BUILD_DIR)/disk.img,format=raw,if=ide,snapshot=on \
         --nographic
 
 run_with_graphic: $(BUILD_DIR)/disk.img
 	qemu-system-x86_64 \
-        --machine q35,accel=kvm:whpx:hvf:tcg \
+        --machine q35 -d int -D $(BUILD_DIR)/qemu.log \
         --no-reboot \
         -drive file=$(BUILD_DIR)/disk.img,format=raw,if=ide,snapshot=on
 

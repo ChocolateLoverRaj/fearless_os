@@ -1,7 +1,5 @@
 [unstable]
-build-std = ["core"]
+build-std = ["core", "alloc"]
 
 [build]
-rustflags = [
-    "-C", "relocation-model=static",
-]
+rustflags = ["-C", "relocation-model=static"]

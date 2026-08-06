@@ -4,3 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bitbybit = "2.0.1"
+log = "0.4.33"
+spin = { version = "0.12.2", default-features = false, features = ["once"] }
+unicode-segmentation = "1.13.3"
+zerocopy = { version = "0.8.55", features = ["derive"] }

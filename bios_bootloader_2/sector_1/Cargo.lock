@@ -28,6 +28,13 @@ checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
 [[package]]
 name = "common"
 version = "0.1.0"
+dependencies = [
+ "bitbybit",
+ "log",
+ "spin",
+ "unicode-segmentation",
+ "zerocopy",
+]
 
 [[package]]
 name = "const_fn"
@@ -79,10 +86,17 @@ dependencies = [
  "common",
  "elf",
  "log",
+ "spin",
  "unicode-segmentation",
  "x86_64",
  "zerocopy",
 ]
+
+[[package]]
+name = "spin"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8abadc99fd9c7bbb7d0ca2b31d72a067d0c0dcd7aad25ab8cac71ba91417694b"
 
 [[package]]
 name = "syn"

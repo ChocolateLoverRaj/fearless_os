@@ -7,6 +7,36 @@ LME equ 1 << 8
 PE equ 1 << 0
 PG equ 1 << 31
 
+; Call this before pushing things onto the stack that you want real mode to access in its stack
+%macro SAVE_ENV 0
+    cmp word [table.stack_pointer], 0
+    jz %%done
+    xchg rsp, [table.stack_pointer]
+%%done
+
+    sub rsp, 10
+    sgdt [rsp]
+    lgdt [gdt_pointer]
+
+    sub rsp, 10
+    sidt [rsp]
+%%done2
+%endmacro
+
+; Call this just before returning
+%macro RESTORE_ENV 0
+    lidt [rsp]
+    add rsp, 10
+
+    lgdt [rsp]
+    add rsp, 10
+
+    cmp qword [table.stack_pointer], 0
+    jz %%done
+    xchg rsp, [table.stack_pointer]
+%%done
+%endmacro
+
 ; Clobbers ax
 %macro ENTER_REAL 1
     cli
@@ -70,6 +100,8 @@ PG equ 1 << 31
 %endmacro
 
 table:
+.stack_pointer:
+    dq 0
     dq int_10_long
     dq int_15_long
     dq extended_read_long
@@ -77,20 +109,23 @@ table:
 ALIGN 16
 [BITS 64]
 int_10_long:
+    SAVE_ENV
     ENTER_REAL int_10_real
 [BITS 16]
 int_10_real:
-    mov ax, di
+    mov ax, dx
     mov ah, 0x0E
     int 0x10
     EXIT_REAL int_10_done
 [BITS 64]
 int_10_done:
+    RESTORE_ENV
     ret
 
 ALIGN 16
 [BITS 64]
 int_15_long:
+    SAVE_ENV
     push si
     ENTER_REAL int_15_real
 [BITS 16]
@@ -113,6 +148,7 @@ int_15_done:
     ; Put eax in lower 32 bits of rax and ebx in upper 32 bits
     pop rax
     ; Rdx will have the dl already
+    RESTORE_ENV
     ret
 
 ALIGN 16
@@ -139,3 +175,29 @@ real_mode_idt:
     dw 0x03FF
 .addr:
     dd 0x00000000
+
+ALIGN 8
+gdt:
+    .Null:
+        dq 0x0000000000000000      ; 0x00: Null Descriptor
+    .Code:
+        dq 0x00209A0000000000      ; 0x08: 64-bit code descriptor
+    .Code32:
+        dq 0x00CF9A000000FFFF      ; 0x10: 32-bit code descriptor
+    .Code16:
+        dq 0x000F9A000000FFFF      ; 0x18: 16-bit code segment
+    .Data:
+        dq 0x0000920000000000      ; 0x20: 64-bit data descriptor
+    .Data32:
+        dq 0x00CF92000000FFFF      ; 0x28: 32-bit data descriptor
+    .Data16:
+        dq 0x000092000000FFFF
+    .End:
+
+gdt_pointer:
+    .Size:
+        ; Size of GDT - 1
+        dw (gdt.End - gdt) - 1
+    .Addr:
+        ; Address of GDT
+        dd gdt

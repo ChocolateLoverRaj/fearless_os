@@ -1,12 +1,15 @@
 use core::fmt::Write;
 
 use log::{Log, max_level, set_logger, set_max_level};
+use spin::Once;
 
-use crate::{bios::int_10, writer_with_cr::WriterWithCr};
+use crate::{bios::BiosFns, writer_with_cr::WriterWithCr};
 
-struct Logger;
+struct Logger {
+    bios_fns: &'static BiosFns,
+}
 
-static LOGGER: Logger = Logger;
+static LOGGER: Once<Logger> = Once::new();
 
 impl Log for Logger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
@@ -14,16 +17,20 @@ impl Log for Logger {
     }
 
     fn log(&self, record: &log::Record) {
-        struct Int10Writer;
+        struct Int10Writer {
+            bios_fns: &'static BiosFns,
+        };
         impl Write for Int10Writer {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 for &b in s.as_bytes() {
-                    int_10(b);
+                    self.bios_fns.int_10(b);
                 }
                 Ok(())
             }
         }
-        let mut writer = WriterWithCr::new(Int10Writer);
+        let mut writer = WriterWithCr::new(Int10Writer {
+            bios_fns: self.bios_fns,
+        });
         let msg = record.args();
         writeln!(writer, "{msg}").unwrap();
     }
@@ -31,7 +38,10 @@ impl Log for Logger {
     fn flush(&self) {}
 }
 
-pub fn init() {
+pub fn init(bios_functions: &'static BiosFns) {
     set_max_level(log::LevelFilter::Info);
-    set_logger(&LOGGER).unwrap();
+    set_logger(LOGGER.call_once(|| Logger {
+        bios_fns: bios_functions,
+    }))
+    .unwrap();
 }

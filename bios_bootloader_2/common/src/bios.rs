@@ -4,8 +4,9 @@ use core::{
 };
 
 use bitbybit::bitfield;
-use common::SECTOR_1;
 use zerocopy::{FromBytes, FromZeros};
+
+use crate::SECTOR_1;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -26,7 +27,8 @@ struct ExtendedReadRawOutput {
 
 #[repr(C)]
 struct UtilTable {
-    int_10: extern "C" fn(u8),
+    low_mem_stack_pointer: Option<NonZero<u16>>,
+    int_10: extern "C" fn(u64, u64, u8),
     /// args: di, es, ebx, ecx
     int_15: extern "C" fn(u16, u16, u32, u32) -> Int15RawOutput,
     /// args: ds, si, dl
@@ -42,8 +44,43 @@ fn table() -> &'static UtilTable {
     }
 }
 
-pub fn int_10(byte: u8) {
-    (table().int_10)(byte)
+pub struct BiosFns {
+    /// If rsp is not real-mode accessible, we have to switch to a real mode accessible stack pointer to call bios functions.
+    /// If this is None, the stack pointer will not be changed.
+    bios_stack_pointer: Option<NonZero<u64>>,
+    bios_gdt: Option<NonZero<u64>>,
+    table: &'static UtilTable,
+}
+
+impl BiosFns {
+    /// Safety: bios functions must exist at `SECTOR_1` and the bios stack pointer must be valid.
+    pub unsafe fn new(
+        bios_stack_pointer: Option<NonZero<u16>>,
+        bios_gdt: Option<NonZero<u64>>,
+    ) -> Self {
+        let util_table = unsafe {
+            NonNull::new(usize::try_from(SECTOR_1).unwrap() as *mut UtilTable)
+                .unwrap()
+                .as_mut()
+        };
+        util_table.low_mem_stack_pointer = bios_stack_pointer;
+
+        Self {
+            bios_stack_pointer: bios_stack_pointer
+                .map(|n| NonZero::new(n.get().into()))
+                .unwrap_or_default(),
+            bios_gdt,
+            table: util_table,
+        }
+    }
+
+    pub fn int_10(&self, byte: u8) {
+        (self.table.int_10)(
+            self.bios_stack_pointer.map_or(0, |n| n.get().into()),
+            self.bios_gdt.map_or(0, |n| n.get()),
+            byte,
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, FromBytes)]
