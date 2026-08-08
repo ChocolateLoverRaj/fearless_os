@@ -28,7 +28,7 @@ struct ExtendedReadRawOutput {
 #[repr(C)]
 struct UtilTable {
     low_mem_stack_pointer: Option<NonZero<u16>>,
-    int_10: extern "C" fn(u64, u64, u8),
+    int_10: extern "C" fn(u8),
     /// args: di, es, ebx, ecx
     int_15: extern "C" fn(u16, u16, u32, u32) -> Int15RawOutput,
     /// args: ds, si, dl
@@ -75,11 +75,7 @@ impl BiosFns {
     }
 
     pub fn int_10(&self, byte: u8) {
-        (self.table.int_10)(
-            self.bios_stack_pointer.map_or(0, |n| n.get().into()),
-            self.bios_gdt.map_or(0, |n| n.get()),
-            byte,
-        )
+        (self.table.int_10)(byte)
     }
 }
 

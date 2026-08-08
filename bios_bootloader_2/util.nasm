@@ -113,7 +113,7 @@ int_10_long:
     ENTER_REAL int_10_real
 [BITS 16]
 int_10_real:
-    mov ax, dx
+    mov ax, di
     mov ah, 0x0E
     int 0x10
     EXIT_REAL int_10_done

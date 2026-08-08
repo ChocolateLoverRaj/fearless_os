@@ -3,8 +3,11 @@
 #![feature(abi_x86_interrupt)]
 extern crate alloc;
 
+mod acpi_handler;
 mod allocator;
+mod bios_data_area;
 mod interrupts;
+mod memory;
 
 use core::{
     arch::naked_asm,
@@ -12,10 +15,12 @@ use core::{
     mem::MaybeUninit,
     num::NonZero,
     panic::PanicInfo,
-    ptr::addr_of,
+    ptr::{NonNull, addr_of},
+    slice,
     sync::atomic::{AtomicU16, Ordering},
 };
 
+use acpi::rsdp::Rsdp;
 use alloc::{
     boxed::Box,
     vec::{self, Vec},
@@ -34,7 +39,7 @@ use x86_64::{
     structures::DescriptorTablePointer,
 };
 
-use crate::allocator::TALC;
+use crate::{acpi_handler::AcpiHandler, allocator::TALC, bios_data_area::BiosDataArea};
 
 unsafe extern "C" {
     static __start: *const u8;
@@ -92,18 +97,6 @@ struct UsableMemNode {
     used_len: u64,
 }
 
-struct StaticStuff {
-    /// Enough to store up to 4 GiB point.
-    /// Each bit represents a 4 KiB phys frame starting a phys addr 0.
-    free_phys_mem: BitAlloc1M,
-    /// Each bit represents a 4 KiB page starting at virt addr [`DYNAMIC_VIRT`].
-    free_virt_mem: BitAlloc1M,
-}
-
-static FREE_PHYS_MEM: Mutex<StaticStuff> = Mutex::new(StaticStuff {
-    free_phys_mem: BitAlloc1M::DEFAULT,
-    free_virt_mem: BitAlloc1M::DEFAULT,
-});
 static BIOS_FNS: Once<BiosFns> = Once::new();
 
 unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
@@ -118,42 +111,24 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     log::info!("Hello from big stage. {info:#X?}.");
     interrupts::init();
     log::info!("initialized interrupts.");
-
-    let mut s = FREE_PHYS_MEM.lock();
-    for a in MemoryIterator::default() {
-        let a = a.unwrap();
-        if a.is_usable() {
-            let start = a.base_addr as usize;
-            let end = start + a.len as usize;
-            let start_page = start.next_multiple_of(0x1000) / 0x1000;
-            let end_page = end / 0x1000;
-
-            let range = start_page..min(end_page, BitAlloc1M::CAP);
-            if !range.is_empty() {
-                s.free_phys_mem.insert(range);
-            }
-        }
-    }
-    for used_range in [
-        (0..info.low_used_mem_len),
-        (info.big_stage_phys_start
-            ..info.big_stage_phys_start
-                + (addr_of!(__bss_end).addr() - addr_of!(__start).addr()) as u64),
-    ] {
-        let start_page = used_range.start / 0x1000;
-        let end_page = used_range.end.next_multiple_of(0x1000) / 0x1000;
-        let range = start_page as usize..end_page as usize;
-        log::info!("removing range: {range:#X?}. Cap: {:#X}.", BitAlloc1M::CAP);
-        s.free_phys_mem.remove(range);
-    }
-
-    s.free_virt_mem.insert(0..BitAlloc1M::CAP);
-
-    let allocated_phys_mem = s.free_phys_mem.alloc().unwrap();
-    let page = s.free_virt_mem.alloc().unwrap();
-    log::info!("could alloc {page:#X}->{allocated_phys_mem:#X}.");
+    unsafe { memory::init(info) };
 
     int3();
+
+    let bios_data_area = unsafe { NonNull::new(0x400 as *mut BiosDataArea).unwrap().as_ref() };
+    log::info!("bios_data_area: {:#X?}", bios_data_area);
+
+    // let ebda_pointer = bios_data_area.ebda_base_addr.get() as *mut u8;
+    // let ebda_len = 0xA0000 - bios_data_area.ebda_base_addr.get();
+    // let ebda = unsafe { slice::from_raw_parts(ebda_pointer, ebda_len as usize) };
+    // let possible_rsdp = &ebda[bios_data_area.ebda_base_addr.get().next_multiple_of(16) as usize..];
+    // let rsdp = possible_rsdp
+    //     .array_windows::<16>()
+    //     .find(|bytes| if bytes[..8] == b"RSD PTR\0" {
+    //         Rsdp::
+    //     });
+    let rsdp = unsafe { Rsdp::search_for_on_bios(AcpiHandler {}) }.unwrap();
+    log::info!("RSDP: {:#X?}", rsdp.get());
 
     loop {
         hlt();
