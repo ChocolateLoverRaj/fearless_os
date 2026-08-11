@@ -8,7 +8,7 @@ PE equ 1 << 0
 PG equ 1 << 31
 
 ; Call this before pushing things onto the stack that you want real mode to access in its stack
-%macro SAVE_ENV 0
+%macro LOAD_REAL_ENV 0
     cmp word [table.stack_pointer], 0
     jz %%done
     xchg rsp, [table.stack_pointer]
@@ -24,7 +24,7 @@ PG equ 1 << 31
 %endmacro
 
 ; Call this just before returning
-%macro RESTORE_ENV 0
+%macro LOAD_LONG_ENV 0
     lidt [rsp]
     add rsp, 10
 
@@ -111,7 +111,7 @@ table:
 ALIGN 16
 [BITS 64]
 int_10_long:
-    SAVE_ENV
+    LOAD_REAL_ENV
     ENTER_REAL int_10_real
 [BITS 16]
 int_10_real:
@@ -121,13 +121,13 @@ int_10_real:
     EXIT_REAL int_10_done
 [BITS 64]
 int_10_done:
-    RESTORE_ENV
+    LOAD_LONG_ENV
     ret
 
 ALIGN 16
 [BITS 64]
 int_15_long:
-    SAVE_ENV
+    LOAD_REAL_ENV
     ENTER_REAL int_15_real
 [BITS 16]
 int_15_real:
@@ -150,12 +150,13 @@ int_15_done:
     ; Put eax in lower 32 bits of rax and ebx in upper 32 bits
     pop rax
     ; Rdx will have the dl already
-    RESTORE_ENV
+    LOAD_LONG_ENV
     ret
 
 ALIGN 16
 [BITS 64]
 extended_read_long:
+    LOAD_REAL_ENV
     push di
     ENTER_REAL extended_read_real
 [BITS 16]
@@ -169,6 +170,7 @@ extended_read_real:
 [BITS 64]
 extended_read_done:
     mov ax, bx
+    LOAD_LONG_ENV
     ret
 
 ALIGN 4

@@ -228,7 +228,6 @@ pub unsafe fn extended_read(
         host_buffer_address: dest_addr,
         starting_lba: src_lba,
     };
-    log::info!("DAP: {dap:#X?}");
     let dap_addr = RealModeAddr::try_from(u32::try_from(addr_of!(dap).addr()).unwrap()).unwrap();
     let ExtendedReadRawOutput { carry_flag, error } =
         (table().extended_read)(dap_addr.segment, dap_addr.offset, disk);

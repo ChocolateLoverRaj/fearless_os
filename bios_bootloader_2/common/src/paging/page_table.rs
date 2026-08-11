@@ -3,6 +3,7 @@ use core::ops::{Index, IndexMut};
 use arbitrary_int::u9;
 
 #[repr(C, align(0x1000))]
+#[derive(Debug, Clone, Copy)]
 pub struct PageTable([u64; 512]);
 
 impl PageTable {
