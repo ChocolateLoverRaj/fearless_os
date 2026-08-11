@@ -11,7 +11,7 @@ use core::ptr::NonNull;
 use arbitrary_int::u9;
 use raw_cpuid::CpuId;
 
-use crate::paging::page_table_entry::PageTableEntry;
+use crate::paging::{page_table_entry::PageTableEntry, virt_addr::VirtAddr};
 
 pub use leaf_mapping::{LeafMapping, LeafMappingSize};
 pub use page_table::PageTable;
@@ -108,7 +108,7 @@ impl TopLevelPageTable {
                 NonNull::new((current_table_addr + self.offset) as *mut PageTable).unwrap();
             // Safety: table is valid and mapped
             let table = unsafe { table.as_mut() };
-            let entry_index = mapping.virt_addr.index_in_table(level);
+            let entry_index = VirtAddr::new_with_raw_value(mapping.virt_addr).index_in_table(level);
             let raw_entry = &mut table[entry_index];
             if level.mapping_size() == Some(mapping.size) {
                 *raw_entry = {

@@ -74,7 +74,7 @@ Steps:
 ## Initialization
 - We will need 2 page tables ready to go for mapping the usable phys mem.
 - Determine the number of usable mem nodes, which we can call N.
-- Find a chunk of free phys mem that is large enough to contain (remember to consider alignment) N + 2 used mem nodes, 2 page tables.
+- Find a chunk of free phys mem that is large enough to contain (remember to consider alignment) N usable mem nodes, 3 + 2 used mem nodes, 2 page tables.
 - Make sure that chunk is mapped, using the 2 page tables we already have ready
 - Create the first used phys mem node, which will mark itself and the rest of the memory we're using right now as used.
 - Create usable phys mem nodes in that memory

@@ -19,9 +19,24 @@ impl LeafMappingSize {
         }
     }
 }
+
+impl LeafMappingSize {
+    pub fn max_supported() -> Self {
+        if CpuId::new()
+            .get_extended_processor_and_feature_identifiers()
+            .is_some_and(|info| info.has_1gib_pages())
+        {
+            Self::_1G
+        } else {
+            Self::_2M
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct LeafMapping {
     pub(crate) size: LeafMappingSize,
-    pub(crate) virt_addr: VirtAddr,
+    pub(crate) virt_addr: u64,
     pub(crate) phys_addr: u64,
 }
 
@@ -31,7 +46,7 @@ impl LeafMapping {
         assert!(phys_addr.is_multiple_of(size.byte_size()));
         Self {
             size,
-            virt_addr: VirtAddr::new_with_raw_value(virt_addr),
+            virt_addr,
             phys_addr,
         }
     }

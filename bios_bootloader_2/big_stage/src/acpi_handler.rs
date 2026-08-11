@@ -2,8 +2,6 @@ use core::ptr::NonNull;
 
 use acpi::Handler;
 
-use crate::memory::MEMORY;
-
 #[derive(Clone)]
 pub struct AcpiHandler {}
 
@@ -13,16 +11,6 @@ impl Handler for AcpiHandler {
         physical_address: usize,
         size: usize,
     ) -> acpi::PhysicalMapping<Self, T> {
-        let mut mem = MEMORY.get().unwrap().lock();
-
-        // let page_table =
-        // acpi::PhysicalMapping {
-        //     handler: self.clone(),
-        //     mapped_length: 0,
-        //     physical_start: 0,
-        //     region_length: 0,
-        //     virtual_start: NonNull::new(1 as *mut T).unwrap(),
-        // }
         todo!()
     }
 

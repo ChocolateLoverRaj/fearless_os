@@ -90,7 +90,7 @@ struct Stack {
 }
 static mut STACK: Stack = Stack { data: [0; _] };
 
-const OFFSET_MAP: u64 = 0xFFFFC00000000000;
+const MAP_OFFSET: u64 = 0xFFFFC00000000000;
 
 const DYNAMIC_VIRT: u64 = 0xFFFFA00000000000;
 
@@ -111,9 +111,9 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     });
     logger::init(bios_fns);
     log::info!("Hello from big stage. {info:#X?}.");
+    unsafe { memory::init(info) };
     interrupts::init();
     log::info!("initialized interrupts.");
-    unsafe { memory::init(info) };
 
     int3();
 
