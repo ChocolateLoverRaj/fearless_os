@@ -105,6 +105,8 @@ table:
     dq int_10_long
     dq int_15_long
     dq extended_read_long
+.int_15_buffer:
+    times 24 db 0
 
 ALIGN 16
 [BITS 64]
@@ -126,21 +128,21 @@ ALIGN 16
 [BITS 64]
 int_15_long:
     SAVE_ENV
-    push si
     ENTER_REAL int_15_real
 [BITS 16]
 int_15_real:
-    pop es
-    mov ebx, edx
+    mov ebx, edi
     mov edx, 0x534D4150
     mov eax, 0xE820
+    mov ecx, 24
+    mov di, table.int_15_buffer
     int 0x15
     ; outputs: eax, ebx, cl, carry flag
+    ; put carry flag into dl
+    setc dl
     ; Put eax and ebx onto the stack
     push ebx
     push eax
-    ; put carry flag into dl
-    setc dl
     mov dh, cl
     EXIT_REAL int_15_done
 [BITS 64]

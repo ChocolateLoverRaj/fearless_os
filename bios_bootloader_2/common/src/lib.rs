@@ -3,6 +3,7 @@ pub mod big_stage_api;
 pub mod bios;
 pub mod logger;
 pub mod writer_with_cr;
+pub mod paging;
 
 pub const STACK_TOP: u16 = 0x7C00;
 pub const PARTITION_SECTOR_0: u16 = 0x7C00;

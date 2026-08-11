@@ -58,6 +58,8 @@
               parted
               gptfdisk
               gnumake
+              # for crc32
+              busybox
             ];
           };
       }

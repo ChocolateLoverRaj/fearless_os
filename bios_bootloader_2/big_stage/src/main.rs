@@ -8,6 +8,9 @@ mod allocator;
 mod bios_data_area;
 mod interrupts;
 mod memory;
+mod physical_memory;
+mod range_utils;
+mod virtual_memory;
 
 use core::{
     arch::naked_asm,
@@ -65,7 +68,7 @@ unsafe extern "C" fn _start() {
 
         pop rdi
         mov [{original_stack_pointer}], sp
-        mov rsp, {stack}
+        lea rsp, {stack}
         add rsp, {stack_size}
         call {rust_start}
         ",
@@ -102,10 +105,9 @@ static BIOS_FNS: Once<BiosFns> = Once::new();
 unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     // Safety: BIOS fns are still mapped and the old real-mode stack is completely free for us to use
     let bios_fns = BIOS_FNS.call_once(|| unsafe {
-        BiosFns::new(
-            Some(NonZero::new(ORIGINAL_STACK_POINTER.load(Ordering::Relaxed)).unwrap()),
-            Some(NonZero::new(info.low_mem_gdt_ptr_addr).unwrap()),
-        )
+        BiosFns::new(Some(
+            NonZero::new(ORIGINAL_STACK_POINTER.load(Ordering::Relaxed)).unwrap(),
+        ))
     });
     logger::init(bios_fns);
     log::info!("Hello from big stage. {info:#X?}.");

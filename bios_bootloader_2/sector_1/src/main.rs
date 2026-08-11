@@ -1,9 +1,9 @@
 #![no_std]
 #![no_main]
 use core::{
-    arch::{asm, naked_asm},
+    arch::naked_asm,
     cmp::{max, min},
-    num::NonZero,
+    iter,
     panic::PanicInfo,
     ptr::{NonNull, addr_of},
 };
@@ -13,20 +13,17 @@ use common::{
     big_stage_api::{self, BigStageEntryInfo},
     bios::BiosFns,
     logger,
+    paging::{
+        self, LeafMapping, LeafMappingSize, MapError, PageTable, ScratchPageTable,
+        TableMappingSize, TableMappingVirtAddr, TopLevel, TopLevelPageTable,
+    },
 };
 use spin::Once;
 use x86_64::{
     PhysAddr, VirtAddr,
     instructions::hlt,
     registers::control::Cr3,
-    structures::{
-        DescriptorTablePointer,
-        gdt::GlobalDescriptorTable,
-        paging::{
-            FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame,
-            Size2MiB, Size4KiB, mapper::MapToError,
-        },
-    },
+    structures::{DescriptorTablePointer, gdt::GlobalDescriptorTable},
 };
 
 use common::bios::{MemoryIterator, RealModeAddr, extended_read};
@@ -50,7 +47,9 @@ unsafe extern "C" fn _start() {
         lea rcx, {__bss_u64s_to_copy}
         rep stosq
 
-        jmp {rust_start}
+        call {rust_start}
+        mov rdi, rdx
+        call rax
         ",
         __bss_start = sym __bss_start,
         __bss_u64s_to_copy = sym __bss_u64s_to_copy,
@@ -78,10 +77,17 @@ static GDT_PTR: Once<DescriptorTablePointer> = Once::new();
 
 static BIOS_FNS: Once<BiosFns> = Once::new();
 static PAGE_TABLES_MEM: [PageTable; 2] = [PageTable::new(), PageTable::new()];
+static ENTRY_INFO: Once<BigStageEntryInfo> = Once::new();
 
-unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> ! {
+#[repr(C)]
+struct RustStartRet {
+    jmp_addr: big_stage_api::Entry,
+    info: &'static BigStageEntryInfo,
+}
+
+unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> RustStartRet {
     GDT.load();
-    let bios_fns = BIOS_FNS.call_once(|| unsafe { BiosFns::new(None, None) });
+    let bios_fns = BIOS_FNS.call_once(|| unsafe { BiosFns::new(None) });
     logger::init(&bios_fns);
     log::info!("Hello from small Rust. DL={dl:#X}. Partition start LBA: {partition_start_lba:#X}.");
     for m in MemoryIterator::default() {
@@ -159,12 +165,28 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> !
         "read_buffer_addr: {read_buffer_addr:#X}, next_stage_phys_addr: {next_stage_phys_addr:#X}"
     );
 
-    let page_table_256_t = unsafe {
-        NonNull::new(Cr3::read().0.start_address().as_u64() as *mut PageTable)
-            .unwrap()
-            .as_mut()
-    };
-    let mut page_table = unsafe { OffsetPageTable::new(page_table_256_t, VirtAddr::new(0)) };
+    // let top_level = TopLevel::max_supported();
+    let top_level = TopLevel::Maps256T;
+    // static PAGE_TABLE_128_P: paging::PageTable = paging::PageTable::new();
+    let page_table_128_t = Cr3::read().0.start_address().as_u64();
+    // let top_level_table_phys_addr = match top_level {
+    //     TopLevel::Maps128P => addr_of!(PAGE_TABLE_128_P) as u64,
+    //     TopLevel::Maps256T => page_table_128_t,
+    // };
+    let top_level_table_phys_addr = page_table_128_t;
+    // Safety: we and the page table sare identity mapped, the page table is valid
+    let mut pt = unsafe { TopLevelPageTable::new(0, top_level_table_phys_addr, top_level) };
+    // if top_level == TopLevel::Maps128P {
+    //     log::info!("Creating 5-level page tables!");
+    //     unsafe {
+    //         pt.attach_existing_page_table(
+    //             TableMappingVirtAddr::new(0, TableMappingSize::_256T),
+    //             page_table_128_t,
+    //             iter::empty(),
+    //         )
+    //     }
+    //     .unwrap();
+    // }
 
     let read_buffer_real_addr =
         RealModeAddr::try_from(u32::try_from(read_buffer_addr).unwrap()).unwrap();
@@ -193,52 +215,37 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> !
 
         // Worst case is that the max 127 sectors cross a 2 MiB boundary
         // We can ensure that the first and last page in the range are mapped
-        let first_page = Page::<Size2MiB>::containing_address(VirtAddr::new(
-            BIG_STAGE_ADDR + sectors_copied * 512,
-        ));
-        let first_frame = PhysFrame::<Size2MiB>::containing_address(PhysAddr::new(
-            next_stage_phys_addr + sectors_copied * 512,
-        ));
-        let last_page = Page::<Size2MiB>::containing_address(VirtAddr::new(
-            BIG_STAGE_ADDR + (sectors_copied + sectors_to_copy_this_iteration - 1) * 512,
-        ));
-        let last_frame = PhysFrame::<Size2MiB>::containing_address(PhysAddr::new(
-            next_stage_phys_addr + (sectors_copied + sectors_to_copy_this_iteration - 1) * 512,
-        ));
+        let first_page = (BIG_STAGE_ADDR + sectors_copied * 512) / LeafMappingSize::_2M.byte_size()
+            * LeafMappingSize::_2M.byte_size();
+        let first_frame = (next_stage_phys_addr + sectors_copied * 512)
+            / LeafMappingSize::_2M.byte_size()
+            * LeafMappingSize::_2M.byte_size();
+        let last_page = (BIG_STAGE_ADDR
+            + (sectors_copied + sectors_to_copy_this_iteration - 1) * 512)
+            / LeafMappingSize::_2M.byte_size()
+            * LeafMappingSize::_2M.byte_size();
+        let last_frame = (next_stage_phys_addr
+            + (sectors_copied + sectors_to_copy_this_iteration - 1) * 512)
+            / LeafMappingSize::_2M.byte_size()
+            * LeafMappingSize::_2M.byte_size();
 
-        struct F {
-            frames_allocated: usize,
-        }
-        unsafe impl FrameAllocator<Size4KiB> for F {
-            fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
-                if self.frames_allocated < PAGE_TABLES_MEM.len() {
-                    let frame = core::ptr::from_ref(&PAGE_TABLES_MEM[self.frames_allocated]);
-                    let frame = PhysFrame::from_start_address(PhysAddr::new(
-                        frame.addr().try_into().unwrap(),
-                    ))
-                    .unwrap();
-                    self.frames_allocated += 1;
-                    Some(frame)
-                } else {
-                    None
-                }
-            }
-        }
-        let mut frame_allocator = F {
-            frames_allocated: 0,
-        };
+        let mut i = PAGE_TABLES_MEM
+            .iter()
+            .map(|page_table| unsafe { ScratchPageTable::new(addr_of!(*page_table) as u64) });
         for (page, frame) in [(first_page, first_frame), (last_page, last_frame)] {
             log::info!("Mapping {page:#X?} to {frame:#X?}");
             let result = unsafe {
-                page_table.map_to(
-                    page,
-                    frame,
-                    PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
-                    &mut frame_allocator,
+                pt.map_leaf(
+                    LeafMapping::new(paging::LeafMappingSize::_2M, page, frame),
+                    &mut i,
                 )
             };
             match result {
-                Ok(_) | Err(MapToError::PageAlreadyMapped(_)) => {}
+                Ok(_)
+                | Err(MapError::AlreadyMapped {
+                    table: _,
+                    entry_index: _,
+                }) => {}
                 Err(e) => panic!("{:?}", e),
             }
         }
@@ -250,6 +257,7 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> !
         let src = NonNull::new(read_buffer_addr as *mut u8).unwrap();
         let dest =
             unsafe { NonNull::new_unchecked((BIG_STAGE_ADDR + sectors_copied * 512) as *mut u8) };
+        log::info!("copying...");
         unsafe {
             src.copy_to_nonoverlapping(
                 dest,
@@ -260,12 +268,23 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> !
         sectors_copied += sectors_to_copy_this_iteration;
     }
 
-    let b = unsafe {
-        NonNull::new(next_stage_jmp_addr as *mut [u8; 16])
-            .unwrap()
-            .as_ref()
+    let next_stage_file = unsafe {
+        core::slice::from_raw_parts(BIG_STAGE_ADDR as *const u8, next_stage_file_len as usize)
     };
-    log::info!("Jumping to big stage ({next_stage_jmp_addr:#X} with instructions {b:X?}");
+    let crc = crc32fast::hash(next_stage_file);
+    log::info!(
+        "crc32 of file: {crc:X?}. file len: {}",
+        next_stage_file.len()
+    );
+    let next_stage_mem = unsafe {
+        core::slice::from_raw_parts(BIG_STAGE_ADDR as *const u8, next_stage_mem_len as usize)
+    };
+    let crc32 = crc32fast::hash(next_stage_mem);
+    log::info!(
+        "crc32 of mem: {crc32:X?}. mem len: {}",
+        next_stage_mem.len()
+    );
+    log::info!("Jumping to big stage ({next_stage_jmp_addr:#X}");
     let f = unsafe {
         core::mem::transmute::<_, big_stage_api::Entry>(next_stage_jmp_addr as *const ())
     };
@@ -279,7 +298,8 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> !
         low_mem_gdt_ptr_addr: core::ptr::from_ref(gdt_ptr) as u64,
     };
     log::info!("Passing info to next stage: {big_stage_entry_info:#X?}");
-    unsafe { f(&big_stage_entry_info) }
+    let info = ENTRY_INFO.call_once(|| big_stage_entry_info);
+    RustStartRet { jmp_addr: f, info }
     // unsafe { asm!("call {}", in(reg) next_stage_jmp_addr, options(noreturn)) };
 }
 

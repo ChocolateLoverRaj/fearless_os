@@ -48,6 +48,7 @@ $(BUILD_DIR)/disk.img: build_scripts $(BUILD_DIR)/disk_sector_0.bin $(BUILD_DIR)
 run: $(BUILD_DIR)/disk.img
 	qemu-system-x86_64 \
         --machine q35 -d int -D $(BUILD_DIR)/qemu.log -m 4G \
+	--cpu qemu64,+la57 \
         --no-reboot \
         -drive file=$(BUILD_DIR)/disk.img,format=raw,if=ide,snapshot=on \
         --nographic

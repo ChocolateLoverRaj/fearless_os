@@ -4,8 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+arbitrary-int = "2.1.1"
 bitbybit = "2.0.1"
+heapless = "0.9.3"
 log = "0.4.33"
+raw-cpuid = "11.6.0"
 spin = { version = "0.12.2", default-features = false, features = ["once"] }
 unicode-segmentation = "1.13.3"
 zerocopy = { version = "0.8.55", features = ["derive"] }

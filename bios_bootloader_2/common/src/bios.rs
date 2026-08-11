@@ -4,7 +4,7 @@ use core::{
 };
 
 use bitbybit::bitfield;
-use zerocopy::{FromBytes, FromZeros};
+use zerocopy::{FromBytes, FromZeros, transmute};
 
 use crate::SECTOR_1;
 
@@ -30,9 +30,10 @@ struct UtilTable {
     low_mem_stack_pointer: Option<NonZero<u16>>,
     int_10: extern "C" fn(u8),
     /// args: di, es, ebx, ecx
-    int_15: extern "C" fn(u16, u16, u32, u32) -> Int15RawOutput,
+    int_15: extern "C" fn(u32) -> Int15RawOutput,
     /// args: ds, si, dl
     extended_read: extern "C" fn(u16, u16, u8) -> ExtendedReadRawOutput,
+    int_15_buffer: [u8; 24],
 }
 
 fn table() -> &'static UtilTable {
@@ -45,19 +46,12 @@ fn table() -> &'static UtilTable {
 }
 
 pub struct BiosFns {
-    /// If rsp is not real-mode accessible, we have to switch to a real mode accessible stack pointer to call bios functions.
-    /// If this is None, the stack pointer will not be changed.
-    bios_stack_pointer: Option<NonZero<u64>>,
-    bios_gdt: Option<NonZero<u64>>,
     table: &'static UtilTable,
 }
 
 impl BiosFns {
     /// Safety: bios functions must exist at `SECTOR_1` and the bios stack pointer must be valid.
-    pub unsafe fn new(
-        bios_stack_pointer: Option<NonZero<u16>>,
-        bios_gdt: Option<NonZero<u64>>,
-    ) -> Self {
+    pub unsafe fn new(bios_stack_pointer: Option<NonZero<u16>>) -> Self {
         let util_table = unsafe {
             NonNull::new(usize::try_from(SECTOR_1).unwrap() as *mut UtilTable)
                 .unwrap()
@@ -65,13 +59,7 @@ impl BiosFns {
         };
         util_table.low_mem_stack_pointer = bios_stack_pointer;
 
-        Self {
-            bios_stack_pointer: bios_stack_pointer
-                .map(|n| NonZero::new(n.get().into()))
-                .unwrap_or_default(),
-            bios_gdt,
-            table: util_table,
-        }
+        Self { table: util_table }
     }
 
     pub fn int_10(&self, byte: u8) {
@@ -126,14 +114,7 @@ pub struct Int15Output {
 
 pub fn int_15(entry_id: u32) -> Result<Int15Output, Int15Error> {
     Ok({
-        let mut data = Int15RawData::new_zeroed();
-        let data_addr =
-            RealModeAddr::try_from(u32::try_from(addr_of_mut!(data).addr()).unwrap()).unwrap();
-        let es = data_addr.segment;
-        let di = data_addr.offset;
-        let bx = entry_id;
-        let ecx = 24;
-        let output = (table().int_15)(di, es, bx, ecx);
+        let output = (table().int_15)(entry_id);
         // let output: Int15RawOutput = try_transmute!(output).unwrap();
         if output.carry_flag {
             return Err(Int15Error::CarryFlagSet);
@@ -141,6 +122,7 @@ pub fn int_15(entry_id: u32) -> Result<Int15Output, Int15Error> {
         if output.eax != 0x534D4150 {
             return Err(Int15Error::InvalidEax(output.eax));
         }
+        let data: Int15RawData = transmute!(table().int_15_buffer);
         Int15Output {
             data: Int15Data {
                 base_addr: data.base_addr,

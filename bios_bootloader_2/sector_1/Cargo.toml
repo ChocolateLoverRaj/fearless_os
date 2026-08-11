@@ -9,8 +9,10 @@ test = false
 bench = false
 
 [dependencies]
+arbitrary-int = { version = "2.1.1", default-features = false }
 bitbybit = "2.0.1"
 common = { version = "0.1.0", path = "../common" }
+crc32fast = { version = "1.5.0", default-features = false }
 log = "0.4.33"
 spin = { version = "0.12.2", default-features = false, features = ["once"] }
 unicode-segmentation = "1.13.3"

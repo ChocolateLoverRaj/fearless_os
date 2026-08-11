@@ -24,22 +24,6 @@ static GDT: Once<Gdt> = Once::new();
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
     log::info!("Breakpoint! Stack frame: {stack_frame:#?}");
 }
-static GDT_RAW: GlobalDescriptorTable = GlobalDescriptorTable::from_raw_entries(&[
-    // Null segment (required)
-    0x0000000000000000,
-    // Code 64
-    0x00209A0000000000,
-    // Code 32
-    0x00CF9A000000FFFF,
-    // Code 16
-    0x000F9A000000FFFF,
-    // Data 64
-    0x0000920000000000,
-    // Data 32
-    0x00CF92000000FFFF,
-    // Data 16
-    0x000092000000FFFF,
-]);
 
 pub fn init() {
     let tss = TSS.call_once(TaskStateSegment::new);
@@ -64,9 +48,7 @@ pub fn init() {
         }
     });
     gdt.gdt.load();
-    // GDT_RAW.load();
-    //
-    // loop {}
+
     unsafe { CS::set_reg(gdt.kernel_code_selector) };
     unsafe { SS::set_reg(gdt.kernel_data_selector) };
     unsafe { load_tss(gdt.tss_selector) };

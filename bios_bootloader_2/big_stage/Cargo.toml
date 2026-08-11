@@ -12,7 +12,9 @@ bench = false
 acpi = { version = "6.1.1", default-features = false }
 bitmap-allocator = "0.4.6"
 common = { version = "0.1.0", path = "../common" }
+heapless = "0.9.3"
 log = "0.4.33"
+nodit = { version = "0.10.0", default-features = false }
 spin = "0.12.2"
 spinning_top = "0.3.0"
 talc = "5.0.4"
