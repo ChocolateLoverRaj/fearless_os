@@ -15,6 +15,7 @@ impl Handler for AcpiHandler {
         size: usize,
     ) -> acpi::PhysicalMapping<Self, T> {
         let phys_addr = physical_address.try_into().unwrap();
+        log::trace!("map phys addr: {phys_addr:#X}");
         MEMORY.ensure_mapped_phys(phys_addr, size.try_into().unwrap());
         acpi::PhysicalMapping {
             handler: self.clone(),

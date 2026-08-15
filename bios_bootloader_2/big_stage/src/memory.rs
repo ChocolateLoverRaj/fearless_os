@@ -1,6 +1,7 @@
 use core::{
     alloc::GlobalAlloc,
     fmt::Debug,
+    iter,
     mem::MaybeUninit,
     ptr::{NonNull, addr_of, null_mut},
 };
@@ -46,8 +47,27 @@ struct MemoryData {
 }
 
 impl MemoryData {
+    fn ensure_mapped_internal(&mut self, phys_addr: u64, len: u64) {}
+
     fn ensure_mapped(&mut self, phys_addr: u64, len: u64) {
-        // FIXME: Actually do it
+        let mapping_size = LeafMappingSize::max_supported();
+        let start_phys_addr = phys_addr / mapping_size.byte_size() * mapping_size.byte_size();
+        let end_phys_addr_exclusive = (phys_addr + len).next_multiple_of(mapping_size.byte_size());
+        let n_mappings = (end_phys_addr_exclusive - start_phys_addr) / mapping_size.byte_size();
+        for i in 0..n_mappings {
+            let phys_addr = start_phys_addr + i * mapping_size.byte_size();
+            let mapping =
+                LeafMapping::new(mapping_size, BIG_STAGE_MAP_OFFSET + phys_addr, phys_addr);
+            let mut scratch_tables = iter::from_fn(|| {
+                Some(unsafe { ScratchPageTable::new(self.free_page_tables.pop()?) })
+            });
+            // TODO: Make sure there are enough page tables
+            unsafe {
+                self.top_page_table
+                    .ensure_mapped_leaf(mapping, &mut scratch_tables)
+            }
+            .unwrap();
+        }
     }
 
     fn find_free_phys_mem(&self, size: u64, align: u64) -> Option<u64> {

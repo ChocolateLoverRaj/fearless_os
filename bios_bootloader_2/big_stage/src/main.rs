@@ -21,7 +21,7 @@ use core::{
     sync::atomic::{AtomicU16, Ordering},
 };
 
-use acpi::rsdp::Rsdp;
+use acpi::{AcpiTables, rsdp::Rsdp};
 use common::{big_stage_api::BigStageEntryInfo, bios::BiosFns, logger};
 use spin::Once;
 use x86_64::instructions::{hlt, interrupts::int3};
@@ -113,6 +113,13 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     //     });
     let rsdp = unsafe { Rsdp::search_for_on_bios(AcpiHandler {}) }.unwrap();
     log::info!("RSDP: {:#X?}", rsdp.get());
+    let acpi_tables =
+        unsafe { AcpiTables::from_rsdp(AcpiHandler {}, rsdp.physical_start) }.unwrap();
+    for (phys_addr, table) in acpi_tables.table_headers() {
+        let signature = table.signature;
+        log::info!("ACPI Table: {signature}.");
+    }
+    log::info!("Done listing ACPI tables");
 
     loop {
         hlt();
