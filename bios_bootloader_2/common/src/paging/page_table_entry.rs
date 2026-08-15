@@ -45,4 +45,14 @@ impl PageTableEntry {
         };
         ((self.raw_value() >> shift) & ((1 << 52) - 1)) << shift
     }
+
+    pub fn eq_configuration(&self, other: &Self, page_table_level: TableLevel) -> bool {
+        self.present() == other.present()
+            && self.address(page_table_level) == other.address(page_table_level)
+            && self.writable() == other.writable()
+            && self.user_mode_accessible() == other.user_mode_accessible()
+            && self.page_level_write_through() == other.page_level_write_through()
+            && self.page_level_cache_disable() == other.page_level_cache_disable()
+            && self.not_executable() == other.not_executable()
+    }
 }

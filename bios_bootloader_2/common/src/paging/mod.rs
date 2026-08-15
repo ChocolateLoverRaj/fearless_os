@@ -96,10 +96,11 @@ impl TopLevelPageTable {
         Ok(())
     }
 
-    pub unsafe fn map_leaf(
+    unsafe fn map_leaf_internal(
         &mut self,
         mapping: LeafMapping,
-        mut scratch_tables: impl Iterator<Item = ScratchPageTable>,
+        scratch_tables: &mut impl Iterator<Item = ScratchPageTable>,
+        must_create_new: bool,
     ) -> Result<(), MapError> {
         let mut level = TableLevel::from(self.level);
         let mut current_table_addr = self.addr;
@@ -110,25 +111,29 @@ impl TopLevelPageTable {
             let table = unsafe { table.as_mut() };
             let entry_index = VirtAddr::new_with_raw_value(mapping.virt_addr).index_in_table(level);
             let raw_entry = &mut table[entry_index];
+            let entry = PageTableEntry::new_with_raw_value(*raw_entry);
             if level.mapping_size() == Some(mapping.size) {
-                *raw_entry = {
+                let expected_entry = {
                     let mut entry = PageTableEntry::new_with_raw_value(0)
                         .with_present(true)
                         .with_writable(true)
                         .with_user_mode_accessible(true)
                         .with_not_executable(false);
                     mapping.make_entry(&mut entry);
-                    entry.raw_value()
+                    entry
                 };
+                if entry.present() {
+                    if must_create_new || !entry.eq_configuration(&expected_entry, level) {
+                        return Err(MapError::AlreadyMapped);
+                    }
+                } else {
+                    *raw_entry = expected_entry.raw_value();
+                }
                 break;
             } else {
-                let entry = PageTableEntry::new_with_raw_value(*raw_entry);
                 if entry.present() {
                     if entry.page_size() {
-                        return Err(MapError::AlreadyMapped {
-                            table: level,
-                            entry_index: entry_index as u9,
-                        });
+                        return Err(MapError::AlreadyMapped);
                     } else {
                         current_table_addr = entry.address(level);
                         if current_table_addr == 0 {
@@ -150,6 +155,25 @@ impl TopLevelPageTable {
         }
         Ok(())
     }
+
+    pub unsafe fn map_leaf(
+        &mut self,
+        mapping: LeafMapping,
+        scratch_tables: &mut impl Iterator<Item = ScratchPageTable>,
+    ) -> Result<(), MapError> {
+        unsafe { self.map_leaf_internal(mapping, scratch_tables, true) }
+    }
+
+    pub unsafe fn ensure_mapped_leaf(
+        &mut self,
+        mapping: LeafMapping,
+        scratch_tables: &mut impl Iterator<Item = ScratchPageTable>,
+    ) -> Result<(), EnsureMappedError> {
+        unsafe { self.map_leaf_internal(mapping, scratch_tables, false) }.map_err(|e| match e {
+            MapError::AlreadyMapped => EnsureMappedError::AlreadyMappedDifferently,
+            MapError::OutOfScratchTables => EnsureMappedError::OutOfScratchTables,
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -160,7 +184,13 @@ pub enum AttachError {
 
 #[derive(Debug)]
 pub enum MapError {
-    AlreadyMapped { table: TableLevel, entry_index: u9 },
+    AlreadyMapped,
+    OutOfScratchTables,
+}
+
+#[derive(Debug)]
+pub enum EnsureMappedError {
+    AlreadyMappedDifferently,
     OutOfScratchTables,
 }
 

@@ -1,6 +1,9 @@
 use core::ptr::NonNull;
 
 use acpi::Handler;
+use common::BIG_STAGE_MAP_OFFSET;
+
+use crate::memory::MEMORY;
 
 #[derive(Clone)]
 pub struct AcpiHandler {}
@@ -11,11 +14,19 @@ impl Handler for AcpiHandler {
         physical_address: usize,
         size: usize,
     ) -> acpi::PhysicalMapping<Self, T> {
-        todo!()
+        let phys_addr = physical_address.try_into().unwrap();
+        MEMORY.ensure_mapped_phys(phys_addr, size.try_into().unwrap());
+        acpi::PhysicalMapping {
+            handler: self.clone(),
+            physical_start: physical_address,
+            mapped_length: size,
+            region_length: size,
+            virtual_start: NonNull::new((BIG_STAGE_MAP_OFFSET + phys_addr) as *mut _).unwrap(),
+        }
     }
 
     fn unmap_physical_region<T>(region: &acpi::PhysicalMapping<Self, T>) {
-        todo!()
+        // TODO: Maybe unmap?
     }
 
     fn read_u8(&self, address: usize) -> u8 {

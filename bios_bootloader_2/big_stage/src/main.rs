@@ -4,9 +4,10 @@
 extern crate alloc;
 
 mod acpi_handler;
-mod allocator;
 mod bios_data_area;
+mod free_iterator;
 mod interrupts;
+mod linked_list;
 mod memory;
 mod physical_memory;
 mod range_utils;
@@ -14,35 +15,18 @@ mod virtual_memory;
 
 use core::{
     arch::naked_asm,
-    cmp::min,
-    mem::MaybeUninit,
     num::NonZero,
     panic::PanicInfo,
-    ptr::{NonNull, addr_of},
-    slice,
+    ptr::NonNull,
     sync::atomic::{AtomicU16, Ordering},
 };
 
 use acpi::rsdp::Rsdp;
-use alloc::{
-    boxed::Box,
-    vec::{self, Vec},
-};
-use bitmap_allocator::{BitAlloc, BitAlloc1M};
-use common::{
-    STACK_TOP,
-    big_stage_api::BigStageEntryInfo,
-    bios::{self, BiosFns, MemoryIterator},
-    logger,
-};
-use spin::{Mutex, Once};
-use x86_64::{
-    VirtAddr,
-    instructions::{hlt, interrupts::int3},
-    structures::DescriptorTablePointer,
-};
+use common::{big_stage_api::BigStageEntryInfo, bios::BiosFns, logger};
+use spin::Once;
+use x86_64::instructions::{hlt, interrupts::int3};
 
-use crate::{acpi_handler::AcpiHandler, allocator::TALC, bios_data_area::BiosDataArea};
+use crate::{acpi_handler::AcpiHandler, bios_data_area::BiosDataArea};
 
 unsafe extern "C" {
     static __start: *const u8;
@@ -89,8 +73,6 @@ struct Stack {
     data: [u8; STACK_SIZE],
 }
 static mut STACK: Stack = Stack { data: [0; _] };
-
-const MAP_OFFSET: u64 = 0xFFFFC00000000000;
 
 const DYNAMIC_VIRT: u64 = 0xFFFFA00000000000;
 
