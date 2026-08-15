@@ -21,10 +21,10 @@ use core::{
     sync::atomic::{AtomicU16, Ordering},
 };
 
-use acpi::{AcpiTables, rsdp::Rsdp};
+use acpi::{AcpiTables, address::AddressSpace, rsdp::Rsdp, sdt::fadt::Fadt};
 use common::{big_stage_api::BigStageEntryInfo, bios::BiosFns, logger};
 use spin::Once;
-use x86_64::instructions::{hlt, interrupts::int3};
+use x86_64::instructions::{hlt, interrupts::int3, port::Port};
 
 use crate::{acpi_handler::AcpiHandler, bios_data_area::BiosDataArea};
 
@@ -119,7 +119,22 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
         let signature = table.signature;
         log::info!("ACPI Table: {signature}.");
     }
-    log::info!("Done listing ACPI tables");
+
+    let fadt = acpi_tables.find_table::<Fadt>().unwrap();
+    let mut pm1a_control_port = Port::<u16>::new(fadt.pm1a_control_block.try_into().unwrap());
+    let data = unsafe { pm1a_control_port.read() };
+    if data & 0x1 != 0 {
+        log::info!("ACPI Mode already enabled");
+    } else {
+        let mut smi_port = Port::<u8>::new(fadt.smi_cmd_port.try_into().unwrap());
+        unsafe { smi_port.write(fadt.acpi_enable) };
+        loop {
+            if unsafe { pm1a_control_port.read() } & 0x1 != 0 {
+                break;
+            }
+        }
+        log::info!("ACPI Mode enabled");
+    }
 
     loop {
         hlt();
