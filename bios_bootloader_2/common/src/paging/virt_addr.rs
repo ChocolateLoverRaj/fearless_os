@@ -1,7 +1,7 @@
 use arbitrary_int::{u9, u12};
 use bitbybit::bitfield;
 
-use crate::paging::TableLevel;
+use crate::paging::table_level::TableLevel;
 
 #[bitfield(u64, debug)]
 pub struct VirtAddr {

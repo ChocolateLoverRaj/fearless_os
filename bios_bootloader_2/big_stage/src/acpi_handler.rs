@@ -1,12 +1,73 @@
 use core::ptr::NonNull;
 
-use acpi::Handler;
-use common::BIG_STAGE_MAP_OFFSET;
+use acpi::{AcpiTables, Handler, PciAddress, sdt::mcfg::Mcfg};
+use alloc::collections::btree_map::BTreeMap;
+use arbitrary_int::{u3, u5, u12};
+use common::{OFFSET_MAP_VIRT_ADDR, paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
+use ez_pci::{PciAccess, PciReadWriteValue, PcieInfo};
+use spin::Mutex;
+use x86_64::instructions::port::Port;
 
-use crate::memory::MEMORY;
+use crate::memory::map_phys;
+
+struct PcieData {
+    info: PcieInfo,
+    virt: u64,
+}
+
+static PCIE_MAPPINGS: Mutex<BTreeMap<u16, PcieData>> = Mutex::new(BTreeMap::new());
+
+const ACPI_MAPPING_FLAGS: LeafMappingFlags = LeafMappingFlags {
+    executable: false,
+    writable: true,
+    user_mode_accessible: false,
+    pat_index: STRONG_UNCACHEABLE_INDEX,
+};
 
 #[derive(Clone)]
-pub struct AcpiHandler {}
+pub struct AcpiHandler;
+
+impl AcpiHandler {
+    fn read_pci<T: PciReadWriteValue>(&self, address: PciAddress, offset: u16) -> T {
+        let mappings = PCIE_MAPPINGS.lock();
+        let pcie_data = mappings.get(&address.segment()).unwrap();
+        let mut pcie = unsafe {
+            PciAccess::new_pcie(
+                pcie_data.info,
+                NonNull::slice_from_raw_parts(
+                    NonNull::new(pcie_data.virt as *mut _).unwrap(),
+                    SEGMENT_MAPPED_LEN.try_into().unwrap(),
+                ),
+            )
+        };
+        pcie.bus(address.bus())
+            .device(u5::new(address.device()))
+            .unwrap()
+            .function(u3::new(address.function()))
+            .unwrap()
+            .read(u12::new(offset))
+    }
+
+    fn write_pci<T: PciReadWriteValue>(&self, address: PciAddress, offset: u16, value: T) {
+        let mappings = PCIE_MAPPINGS.lock();
+        let pcie_data = mappings.get(&address.segment()).unwrap();
+        let mut pcie = unsafe {
+            PciAccess::new_pcie(
+                pcie_data.info,
+                NonNull::slice_from_raw_parts(
+                    NonNull::new(pcie_data.virt as *mut _).unwrap(),
+                    SEGMENT_MAPPED_LEN.try_into().unwrap(),
+                ),
+            )
+        };
+        pcie.bus(address.bus())
+            .device(u5::new(address.device()))
+            .unwrap()
+            .function(u3::new(address.function()))
+            .unwrap()
+            .write(u12::new(offset), value);
+    }
+}
 
 impl Handler for AcpiHandler {
     unsafe fn map_physical_region<T>(
@@ -14,15 +75,15 @@ impl Handler for AcpiHandler {
         physical_address: usize,
         size: usize,
     ) -> acpi::PhysicalMapping<Self, T> {
-        let phys_addr = physical_address.try_into().unwrap();
-        log::trace!("map phys addr: {phys_addr:#X}");
-        MEMORY.ensure_mapped_phys(phys_addr, size.try_into().unwrap());
+        let phys_addr = u64::try_from(physical_address).unwrap();
+        let virt_start = map_phys(phys_addr, size.try_into().unwrap(), ACPI_MAPPING_FLAGS).unwrap();
+        log::info!("mapped {phys_addr:#X} len {size:#X}.");
         acpi::PhysicalMapping {
             handler: self.clone(),
             physical_start: physical_address,
             mapped_length: size,
             region_length: size,
-            virtual_start: NonNull::new((BIG_STAGE_MAP_OFFSET + phys_addr) as *mut _).unwrap(),
+            virtual_start: NonNull::new(virt_start as *mut _).unwrap(),
         }
     }
 
@@ -31,83 +92,107 @@ impl Handler for AcpiHandler {
     }
 
     fn read_u8(&self, address: usize) -> u8 {
-        todo!()
+        // FIXME: Ensure mapped
+        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
+            .unwrap();
+        unsafe { ptr.read() }
     }
 
     fn read_u16(&self, address: usize) -> u16 {
-        todo!()
+        // FIXME: Ensure mapped
+        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
+            .unwrap();
+        unsafe { ptr.read() }
     }
 
     fn read_u32(&self, address: usize) -> u32 {
-        todo!()
+        // FIXME: Ensure mapped
+        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
+            .unwrap();
+        unsafe { ptr.read() }
     }
 
     fn read_u64(&self, address: usize) -> u64 {
-        todo!()
+        // FIXME: Ensure mapped
+        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
+            .unwrap();
+        unsafe { ptr.read() }
     }
 
     fn write_u8(&self, address: usize, value: u8) {
-        todo!()
+        // FIXME: Ensure mapped
+        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
+            .unwrap();
+        unsafe { ptr.write(value) }
     }
 
     fn write_u16(&self, address: usize, value: u16) {
-        todo!()
+        // FIXME: Ensure mapped
+        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
+            .unwrap();
+        unsafe { ptr.write(value) }
     }
 
     fn write_u32(&self, address: usize, value: u32) {
-        todo!()
+        // FIXME: Ensure mapped
+        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
+            .unwrap();
+        unsafe { ptr.write(value) }
     }
 
     fn write_u64(&self, address: usize, value: u64) {
-        todo!()
+        // FIXME: Ensure mapped
+        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
+            .unwrap();
+        unsafe { ptr.write(value) }
     }
 
     fn read_io_u8(&self, port: u16) -> u8 {
-        todo!()
+        unsafe { Port::new(port).read() }
     }
 
     fn read_io_u16(&self, port: u16) -> u16 {
-        todo!()
+        unsafe { Port::new(port).read() }
     }
 
     fn read_io_u32(&self, port: u16) -> u32 {
-        todo!()
+        unsafe { Port::new(port).read() }
     }
 
     fn write_io_u8(&self, port: u16, value: u8) {
-        todo!()
+        unsafe { Port::new(port).write(value) }
     }
 
     fn write_io_u16(&self, port: u16, value: u16) {
-        todo!()
+        unsafe { Port::new(port).write(value) }
     }
 
     fn write_io_u32(&self, port: u16, value: u32) {
-        todo!()
+        unsafe { Port::new(port).write(value) }
     }
 
     fn read_pci_u8(&self, address: acpi::PciAddress, offset: u16) -> u8 {
-        todo!()
+        self.read_pci(address, offset)
     }
 
     fn read_pci_u16(&self, address: acpi::PciAddress, offset: u16) -> u16 {
-        todo!()
+        self.read_pci(address, offset)
     }
 
     fn read_pci_u32(&self, address: acpi::PciAddress, offset: u16) -> u32 {
-        todo!()
+        self.read_pci(address, offset)
     }
 
     fn write_pci_u8(&self, address: acpi::PciAddress, offset: u16, value: u8) {
-        todo!()
+        self.write_pci(address, offset, value)
     }
 
     fn write_pci_u16(&self, address: acpi::PciAddress, offset: u16, value: u16) {
-        todo!()
+        self.write_pci(address, offset, value)
     }
 
     fn write_pci_u32(&self, address: acpi::PciAddress, offset: u16, value: u32) {
-        todo!()
+        self.write_pci(address, offset, value)
     }
 
     fn nanos_since_boot(&self) -> u64 {
@@ -120,5 +205,40 @@ impl Handler for AcpiHandler {
 
     fn sleep(&self, milliseconds: u64) {
         todo!()
+    }
+
+    fn create_mutex(&self) -> acpi::Handle {
+        // FIXME: Maybe we actually need a mutex?
+        acpi::Handle(0)
+    }
+
+    fn acquire(&self, mutex: acpi::Handle, timeout: u16) -> Result<(), acpi::aml::AmlError> {
+        // FIXME: Maybe we actually need a mutex?
+        Ok(())
+    }
+
+    fn release(&self, mutex: acpi::Handle) {
+        // FIXME: Maybe we actually need a mutex?
+    }
+}
+
+const SEGMENT_MAPPED_LEN: u64 = 0x10000000;
+
+pub fn init(tables: &AcpiTables<AcpiHandler>) {
+    // Find MCFG
+    let mcfg = tables.find_table::<Mcfg>().unwrap();
+    log::info!("MCFG: {:#X?}", mcfg.get());
+
+    for entry in mcfg.entries() {
+        log::info!("Mapping MCFG entry: {:#X?}", entry);
+        let virt_addr =
+            map_phys(entry.base_address, SEGMENT_MAPPED_LEN, ACPI_MAPPING_FLAGS).unwrap();
+        PCIE_MAPPINGS.lock().insert(
+            entry.pci_segment_group,
+            PcieData {
+                info: (*entry).into(),
+                virt: virt_addr,
+            },
+        );
     }
 }

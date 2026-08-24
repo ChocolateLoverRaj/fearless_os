@@ -48,6 +48,7 @@ dependencies = [
  "raw-cpuid",
  "spin",
  "unicode-segmentation",
+ "x86_64 0.15.5 (git+https://github.com/rust-osdev/x86_64?branch=next)",
  "zerocopy",
 ]
 
@@ -132,7 +133,7 @@ dependencies = [
  "log",
  "spin",
  "unicode-segmentation",
- "x86_64",
+ "x86_64 0.15.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "zerocopy",
 ]
 
@@ -182,6 +183,18 @@ name = "x86_64"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be4ec631e1a81d50e46c35a4a00322bd076c47491b64c2fb10a7ffa89002c697"
+dependencies = [
+ "bit_field",
+ "bitflags",
+ "const_fn",
+ "rustversion",
+ "volatile",
+]
+
+[[package]]
+name = "x86_64"
+version = "0.15.5"
+source = "git+https://github.com/rust-osdev/x86_64?branch=next#67541129b58a8b3a7982ce3854ea90724aa496a4"
 dependencies = [
  "bit_field",
  "bitflags",

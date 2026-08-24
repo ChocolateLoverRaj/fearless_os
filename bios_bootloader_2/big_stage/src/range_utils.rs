@@ -58,3 +58,15 @@ impl<T: Iterator<Item = Range<u64>>> Iterator for SubtractRangesIterator<T> {
         return Some(range_to_return);
     }
 }
+
+/// Ranges must be sorted by start.
+pub fn is_overlap(ranges: impl IntoIterator<Item = Range<u64>>) -> bool {
+    let mut position = 0;
+    for range in ranges {
+        if range.start < position {
+            return true;
+        }
+        position = range.end;
+    }
+    false
+}

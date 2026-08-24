@@ -9,16 +9,18 @@ test = false
 bench = false
 
 [dependencies]
-acpi = { version = "6.1.1", default-features = false }
+acpi = { version = "6.1.1", default-features = false, features = ["aml"] }
+arbitrary-int = "2.2.0"
 bitmap-allocator = "0.4.6"
 common = { version = "0.1.0", path = "../common" }
+ez_pci = { version = "2.0.0", path = "../../../ez_pci", features = ["acpi"] }
 heapless = "0.9.3"
 log = "0.4.33"
 nodit = { version = "0.10.0", default-features = false }
 spin = "0.12.2"
 spinning_top = "0.3.0"
 talc = "5.0.4"
-x86_64 = { version = "0.15.5", default-features = false, features = ["abi_x86_interrupt", "instructions"] }
+x86_64 = { version = "0.15.5", default-features = false, features = ["abi_x86_interrupt", "instructions"], git = "https://github.com/rust-osdev/x86_64", branch = "next" }
 zerocopy = "0.8.56"
 
 [build-dependencies]

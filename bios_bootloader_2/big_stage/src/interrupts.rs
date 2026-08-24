@@ -21,7 +21,7 @@ static TSS: Once<TaskStateSegment> = Once::new();
 static GDT: Once<Gdt> = Once::new();
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
-    log::info!("Breakpoint! Stack frame: {stack_frame:#?}");
+    log::debug!("Breakpoint! Stack frame: {stack_frame:#?}");
 }
 
 pub fn init() {

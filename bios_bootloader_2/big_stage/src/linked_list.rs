@@ -35,6 +35,24 @@ impl<T> LinkedList<T> {
     }
 }
 
+impl<T: Ord> LinkedList<T> {
+    pub fn insert_sorted_boxed(&mut self, mut node: Box<LinkedListNode<T>>) {
+        let mut ptr = &mut self.start;
+        loop {
+            if ptr.is_some() {
+                if node.data < ptr.as_ref().unwrap().data {
+                    break;
+                }
+                ptr = &mut ptr.as_mut().unwrap().next;
+            } else {
+                break;
+            }
+        }
+        node.next = ptr.take();
+        *ptr = Some(node);
+    }
+}
+
 impl<T> Default for LinkedList<T> {
     fn default() -> Self {
         Self::new()

@@ -8,14 +8,15 @@ use core::{
 };
 
 use common::{
-    BIG_STAGE_ADDR, BIG_STAGE_MAP_OFFSET, SECTOR_1,
+    BIG_STAGE_LOAD_ADDR, OFFSET_MAP_VIRT_ADDR, SECTOR_1,
     big_stage_api::{self, BigStageEntryInfo},
     bios::BiosFns,
     logger,
     paging::{
-        self, LeafMapping, LeafMappingSize, MapError, PageTable, ScratchPageTable, TopLevel,
+        LeafMapping, LeafMappingFlags, LeafMappingSize, PageTable, ScratchPageTable, TopLevel,
         TopLevelPageTable,
     },
+    pat::WRITE_BACK_INDEX,
 };
 use spin::Once;
 use x86_64::{instructions::hlt, registers::control::Cr3};
@@ -147,6 +148,13 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> R
     // Safety: we and the page table sare identity mapped, the page table is valid
     let mut pt = unsafe { TopLevelPageTable::new(0, top_level_table_phys_addr, top_level) };
 
+    let mapping_flags = LeafMappingFlags {
+        writable: true,
+        user_mode_accessible: false,
+        executable: true,
+        pat_index: WRITE_BACK_INDEX,
+    };
+
     // Up to 2 pages to offset map fist 1 GiB
     // Up to 4 pages to offset map kernel (it may be on a border)
     // Up to 2 pages to map the kernel to its static load address
@@ -157,7 +165,7 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> R
 
     // Offset map the first 1 GiB
     let offset_mapping_size = LeafMappingSize::max_supported();
-    let first_page = BIG_STAGE_MAP_OFFSET;
+    let first_page = OFFSET_MAP_VIRT_ADDR;
     let first_frame = 0;
     let mappings_count = 0x40000000 / offset_mapping_size.byte_size();
     for i in 0..mappings_count {
@@ -165,33 +173,32 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> R
             offset_mapping_size,
             first_page + i * offset_mapping_size.byte_size(),
             first_frame + i * offset_mapping_size.byte_size(),
+            mapping_flags,
         );
+        log::debug!("first 1 GiB mapping: {mapping:X?}.");
         unsafe { pt.ensure_mapped_leaf(mapping, &mut scratch_tables) }.unwrap();
     }
     // Offset map the big stage
     let first_page_phys_addr =
         big_stage_phys_addr / offset_mapping_size.byte_size() * offset_mapping_size.byte_size();
-    let first_page_virt_addr = BIG_STAGE_MAP_OFFSET + first_page_phys_addr;
+    let first_page_virt_addr = OFFSET_MAP_VIRT_ADDR + first_page_phys_addr;
     let last_page_exclusive_phys_addr =
         (big_stage_phys_addr + big_stage_mem_len).next_multiple_of(offset_mapping_size.byte_size());
     let mappings_count =
         (last_page_exclusive_phys_addr - first_page_phys_addr) / offset_mapping_size.byte_size();
     for i in 0..mappings_count {
-        unsafe {
-            pt.ensure_mapped_leaf(
-                LeafMapping::new(
-                    offset_mapping_size,
-                    first_page_virt_addr + i * offset_mapping_size.byte_size(),
-                    first_page_phys_addr + i * offset_mapping_size.byte_size(),
-                ),
-                &mut scratch_tables,
-            )
-        }
-        .unwrap();
+        let mapping = LeafMapping::new(
+            offset_mapping_size,
+            first_page_virt_addr + i * offset_mapping_size.byte_size(),
+            first_page_phys_addr + i * offset_mapping_size.byte_size(),
+            mapping_flags,
+        );
+        log::debug!("big stage mapping {mapping:X?}.");
+        unsafe { pt.ensure_mapped_leaf(mapping, &mut scratch_tables) }.unwrap();
     }
 
     // Map the big stage at it's static load address
-    let first_page = BIG_STAGE_ADDR;
+    let first_page = BIG_STAGE_LOAD_ADDR;
     let first_frame = big_stage_phys_addr;
     let mappings_count = big_stage_mem_len.div_ceil(big_stage_page_size.byte_size());
     for i in 0..mappings_count {
@@ -201,6 +208,7 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> R
                     big_stage_page_size,
                     first_page + (i * big_stage_page_size.byte_size()),
                     first_frame + (i * big_stage_page_size.byte_size()),
+                    mapping_flags,
                 ),
                 &mut scratch_tables,
             )
@@ -233,8 +241,9 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> R
         }
         .unwrap();
         let src = NonNull::new(read_buffer_addr as *mut u8).unwrap();
-        let dest =
-            unsafe { NonNull::new_unchecked((BIG_STAGE_ADDR + sectors_copied * 512) as *mut u8) };
+        let dest = unsafe {
+            NonNull::new_unchecked((BIG_STAGE_LOAD_ADDR + sectors_copied * 512) as *mut u8)
+        };
         unsafe {
             src.copy_to_nonoverlapping(
                 dest,

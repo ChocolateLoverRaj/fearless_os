@@ -24,24 +24,26 @@ checksum = "c880a97d28a3681c0267bd29cff89621202715b065127cd445fa0f0fe0aa2880"
 
 [[package]]
 name = "arbitrary-int"
-version = "2.1.1"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "993a810118f8f37e9c4411c86f1c4c940a09a7ab34b7bf2d88d06f50c553fab7"
+checksum = "0ab387a0c4143b4fd3804e193946e78c8ab16cf26c5fde2048e4ac3d618c3b64"
 
 [[package]]
 name = "big_stage"
 version = "0.1.0"
 dependencies = [
  "acpi",
+ "arbitrary-int",
  "bitmap-allocator",
  "common",
+ "ez_pci",
  "heapless",
  "log",
  "nodit",
  "spin",
  "spinning_top",
  "talc",
- "x86_64",
+ "x86_64 0.15.5 (git+https://github.com/rust-osdev/x86_64?branch=next)",
  "zerocopy",
 ]
 
@@ -110,6 +112,7 @@ dependencies = [
  "raw-cpuid",
  "spin",
  "unicode-segmentation",
+ "x86_64 0.15.5 (git+https://github.com/rust-osdev/x86_64?branch=next)",
  "zerocopy",
 ]
 
@@ -124,6 +127,18 @@ name = "either"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e5e8f6c15a24b9a3ee5efec809ccd006d3b30e8b3bb63c39af737c7f87daa1d"
+
+[[package]]
+name = "ez_pci"
+version = "2.0.0"
+dependencies = [
+ "acpi",
+ "arbitrary-int",
+ "bitbybit",
+ "num_enum",
+ "volatile 0.6.1",
+ "x86_64 0.15.5 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "hash32"
@@ -177,6 +192,27 @@ dependencies = [
  "btree_monstrousity",
  "itertools",
  "smallvec",
+]
+
+[[package]]
+name = "num_enum"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d0bca838442ec211fa11de3a8b0e0e8f3a4522575b5c4c06ed722e005036f26"
+dependencies = [
+ "num_enum_derive",
+ "rustversion",
+]
+
+[[package]]
+name = "num_enum_derive"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -298,6 +334,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "442887c63f2c839b346c192d047a7c87e73d0689c9157b00b53dcc27dd5ea793"
 
 [[package]]
+name = "volatile"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af8ca9a5d4debca0633e697c88269395493cebf2e10db21ca2dbde37c1356452"
+dependencies = [
+ "volatile-macro",
+]
+
+[[package]]
+name = "volatile-macro"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65c67ce935f3b4329e473ecaff7bab444fcdc3d1d19f8bae61fabfa90b84f93e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "x86_64"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -307,7 +363,19 @@ dependencies = [
  "bitflags",
  "const_fn",
  "rustversion",
- "volatile",
+ "volatile 0.4.6",
+]
+
+[[package]]
+name = "x86_64"
+version = "0.15.5"
+source = "git+https://github.com/rust-osdev/x86_64?branch=next#67541129b58a8b3a7982ce3854ea90724aa496a4"
+dependencies = [
+ "bit_field",
+ "bitflags",
+ "const_fn",
+ "rustversion",
+ "volatile 0.4.6",
 ]
 
 [[package]]
