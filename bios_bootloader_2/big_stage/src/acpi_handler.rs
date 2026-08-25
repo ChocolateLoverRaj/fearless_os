@@ -77,7 +77,7 @@ impl Handler for AcpiHandler {
     ) -> acpi::PhysicalMapping<Self, T> {
         let phys_addr = u64::try_from(physical_address).unwrap();
         let virt_start = map_phys(phys_addr, size.try_into().unwrap(), ACPI_MAPPING_FLAGS).unwrap();
-        log::info!("mapped {phys_addr:#X} len {size:#X}.");
+        log::trace!("mapped {phys_addr:#X} len {size:#X}.");
         acpi::PhysicalMapping {
             handler: self.clone(),
             physical_start: physical_address,
@@ -227,10 +227,10 @@ const SEGMENT_MAPPED_LEN: u64 = 0x10000000;
 pub fn init(tables: &AcpiTables<AcpiHandler>) {
     // Find MCFG
     let mcfg = tables.find_table::<Mcfg>().unwrap();
-    log::info!("MCFG: {:#X?}", mcfg.get());
+    log::debug!("MCFG: {:#X?}", mcfg.get());
 
     for entry in mcfg.entries() {
-        log::info!("Mapping MCFG entry: {:#X?}", entry);
+        log::trace!("Mapping MCFG entry: {:#X?}", entry);
         let virt_addr =
             map_phys(entry.base_address, SEGMENT_MAPPED_LEN, ACPI_MAPPING_FLAGS).unwrap();
         PCIE_MAPPINGS.lock().insert(

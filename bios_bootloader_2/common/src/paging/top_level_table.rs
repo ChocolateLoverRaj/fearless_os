@@ -121,6 +121,7 @@ impl TopLevelPageTable {
                     }
                 } else {
                     *raw_entry = expected_entry.raw_value();
+                    log::trace!("{table_level:?} created leaf entry, raw: {raw_entry:#X}.");
                 }
                 break;
             } else {
@@ -137,9 +138,13 @@ impl TopLevelPageTable {
                     table_level = table_level.child().unwrap();
                 } else {
                     let child_table = scratch_tables.next().ok_or(MapError::OutOfScratchTables)?;
+
                     *raw_entry = new_non_leaf_entry(
                         table_level.entry_size().try_into().unwrap(),
                         child_table.addr,
+                    );
+                    log::trace!(
+                        "table level: {table_level:?}[{entry_index}], created raw entry {raw_entry:#X}."
                     );
                     table_addr = child_table.addr;
                     table_level = table_level.child().unwrap();

@@ -27,7 +27,7 @@ impl<'a> InitialPmm<'a> {
             let potential_end = potential_aligned_start + size;
             if potential_end <= entry.end {
                 self.current_offset = potential_end - entry.start;
-                log::info!("PMM: {potential_aligned_start:#X} {size:#X}");
+                log::trace!("PMM: {potential_aligned_start:#X} {size:#X}");
                 break Some(potential_aligned_start);
             }
             self.current_index += 1;

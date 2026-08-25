@@ -9,7 +9,7 @@ use common::{
 };
 use heapless::Vec;
 use spin::{Mutex, Once};
-use x86_64::registers::control::Cr3;
+use x86_64::registers::control::{Cr3, Cr4, Cr4Flags, Efer, EferFlags};
 
 use crate::{
     __bss_end, __start,
@@ -37,6 +37,9 @@ pub unsafe fn init(info: &BigStageEntryInfo) {
     // Safety: doesn't break any existing mappings
     unsafe { pat::init() };
 
+    // Enable no-execute flag
+    unsafe { Efer::update(|efer| efer.insert(EferFlags::NO_EXECUTE_ENABLE)) };
+
     let mut mem_entries = MemoryIterator::default()
         .collect::<Result<heapless::Vec<_, 32>, _>>()
         .unwrap();
@@ -44,7 +47,7 @@ pub unsafe fn init(info: &BigStageEntryInfo) {
     // Make sure ranges are sorted
     mem_entries.sort_unstable_by(|a, b| a.base_addr.cmp(&b.base_addr));
 
-    log::info!("mem_entries: {mem_entries:#X?}");
+    log::debug!("mem_entries: {mem_entries:#X?}");
 
     // Make sure ranges are not overlapping
     if is_overlap(
@@ -70,15 +73,9 @@ pub unsafe fn init(info: &BigStageEntryInfo) {
         .collect::<heapless::Vec<_, _>>();
     let free_mem_ranges = INITIAL_FREE_MEM.call_once(|| free_mem_ranges);
 
-    log::info!("free mem ranges: {free_mem_ranges:#X?}.");
+    log::debug!("free mem ranges: {free_mem_ranges:#X?}.");
 
     let mut pmm = InitialPmm::new(&free_mem_ranges);
-
-    let test_allocations = [
-        pmm.allocate(0x1000, 0x1000),
-        pmm.allocate(0x200_000, 0x200_000),
-    ];
-    log::info!("test allocations: {test_allocations:#X?}");
 
     // Offset map everything
     let top_level_page_table_phys_addr = Cr3::read().0.start_address().as_u64();
@@ -143,7 +140,7 @@ pub fn map_phys(addr: u64, len: u64, flags: LeafMappingFlags) -> Result<u64, Map
             phys_start_addr + mapping_size.byte_size() * i,
             flags,
         );
-        log::info!("mapping {mapping:X?}");
+        log::trace!("mapping {mapping:X?}");
         if let Err(e) = unsafe {
             memory
                 .pt
@@ -156,7 +153,7 @@ pub fn map_phys(addr: u64, len: u64, flags: LeafMappingFlags) -> Result<u64, Map
                 MapError::OutOfScratchTables => return Err(MapPhysError::OutOfVirtMem),
             }
         }
-        log::info!("mapped");
+        log::trace!("mapped");
     }
     Ok(virt_start_addr + (addr - phys_start_addr))
 }
