@@ -35,7 +35,6 @@ fn main() {
 
     // Run the following on the target
     println!("Configuring CONFIGFS");
-    let commands = include_str!("commands.sh");
     let mut child = Command::new("ssh")
         .arg(format!("{ssh_user}@{ssh_addr}"))
         .arg("-p")
