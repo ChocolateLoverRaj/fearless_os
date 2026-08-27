@@ -1,3 +1,14 @@
+use core::str::FromStr;
+
+use acpi::{
+    aml::{
+        self, AmlError,
+        namespace::AmlName,
+        object::{Object, WrappedObject},
+    },
+    registers::Pm1EventFlags,
+};
+use alloc::vec;
 use spin::Once;
 use x86_64::{
     instructions::tables::load_tss,
@@ -9,7 +20,10 @@ use x86_64::{
     },
 };
 
-use crate::{acpi_events, apic::end_of_interrupt};
+use crate::{
+    acpi_events::{self, platform},
+    apic::end_of_interrupt,
+};
 
 pub struct Gdt {
     gdt: GlobalDescriptorTable<5>,
@@ -26,15 +40,51 @@ extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
     log::debug!("Breakpoint! Stack frame: {stack_frame:#?}");
 }
 
-extern "x86-interrupt" fn timer_interrupt_handler(stack_frame: InterruptStackFrame) {
+extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
     log::info!("Timer interrupt!");
     unsafe { end_of_interrupt() };
 }
 
-extern "x86-interrupt" fn sci_interrupt_handler(stack_frame: InterruptStackFrame) {
+extern "x86-interrupt" fn sci_interrupt_handler(_stack_frame: InterruptStackFrame) {
     let events = acpi_events::pending_events();
     acpi_events::clear_events(events);
     log::info!("SCI interrupt! {events:?}.");
+    if events.contains(Pm1EventFlags::POWER_BUTTON) {
+        let platform = platform();
+        let aml = aml::Interpreter::new_from_platform(&platform).unwrap();
+        log::info!("Created AML interpreter");
+        let s5 = aml
+            .evaluate(AmlName::from_str(r#"\_S5_"#).unwrap(), vec![])
+            .unwrap();
+        let Object::Package(package) = &*s5 else {
+            panic!()
+        };
+        let Object::Integer(slp_type_a) = &*package[0] else {
+            panic!()
+        };
+        let Object::Integer(slp_type_b) = &*package[1] else {
+            panic!()
+        };
+        log::info!("S5: slp_type_a={slp_type_a} slp_type_b={slp_type_b}.");
+        match aml.evaluate(
+            AmlName::from_str(r#"\_PTS"#).unwrap(),
+            vec![WrappedObject::new(Object::Integer(5))],
+        ) {
+            Ok(_) | Err(AmlError::ObjectDoesNotExist(_)) => Ok(()),
+            Err(e) => Err(e),
+        }
+        .unwrap();
+        log::info!("Called prepare to sleep.");
+        platform
+            .registers
+            .pm1_control_registers
+            .set_sleep_typ((*slp_type_a).try_into().unwrap());
+        platform
+            .registers
+            .pm1_control_registers
+            .set_bit(acpi::registers::Pm1ControlBit::SleepEnable, true);
+        log::info!("Did shutdown. You shouldn't see this");
+    }
     unsafe { end_of_interrupt() };
 }
 

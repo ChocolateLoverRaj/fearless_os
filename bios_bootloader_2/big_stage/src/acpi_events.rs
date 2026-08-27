@@ -30,3 +30,7 @@ pub fn clear_events(events: Pm1EventFlags) {
         .pm1_event_registers
         .clear_events(events);
 }
+
+pub fn platform() -> &'static AcpiPlatform<AcpiHandler> {
+    ACPI_PLATFORM.get().unwrap()
+}

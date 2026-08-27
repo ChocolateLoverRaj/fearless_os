@@ -137,46 +137,10 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     platform.enter_acpi_mode().unwrap();
     log::info!("Entered ACPI mode");
 
-    let aml = aml::Interpreter::new_from_platform(&platform).unwrap();
-    log::info!("Created AML interpreter");
-    let s5 = aml
-        .evaluate(AmlName::from_str(r#"\_S5_"#).unwrap(), vec![])
-        .unwrap();
-    let Object::Package(package) = &*s5 else {
-        panic!()
-    };
-    let Object::Integer(slp_type_a) = &*package[0] else {
-        panic!()
-    };
-    let Object::Integer(slp_type_b) = &*package[1] else {
-        panic!()
-    };
-    log::info!("S5: slp_type_a={slp_type_a} slp_type_b={slp_type_b}.");
-
     let fadt = platform.tables.find_table::<Fadt>().unwrap();
     let sci_interrupt = fadt.sci_interrupt;
     log::info!("SCI Interrupt IRQ: {sci_interrupt:#X}");
     unsafe { acpi_events::init(platform) };
-
-    // match aml.evaluate(
-    //     AmlName::from_str(r#"\_PTS"#).unwrap(),
-    //     vec![WrappedObject::new(Object::Integer(5))],
-    // ) {
-    //     Ok(_) | Err(AmlError::ObjectDoesNotExist(_)) => Ok(()),
-    //     Err(e) => Err(e),
-    // }
-    // .unwrap();
-    // log::info!("Called prepare to sleep.");
-
-    // platform
-    //     .registers
-    //     .pm1_control_registers
-    //     .set_sleep_typ((*slp_type_a).try_into().unwrap());
-    // platform
-    //     .registers
-    //     .pm1_control_registers
-    //     .set_bit(acpi::registers::Pm1ControlBit::SleepEnable, true);
-    // log::info!("Did shutdown. You shouldn't see this");
 
     x86_64::instructions::interrupts::enable();
     loop {
