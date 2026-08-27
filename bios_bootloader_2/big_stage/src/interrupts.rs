@@ -9,6 +9,8 @@ use x86_64::{
     },
 };
 
+use crate::{acpi_events, apic::end_of_interrupt};
+
 pub struct Gdt {
     gdt: GlobalDescriptorTable<5>,
     kernel_code_selector: SegmentSelector,
@@ -22,6 +24,18 @@ static GDT: Once<Gdt> = Once::new();
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
     log::debug!("Breakpoint! Stack frame: {stack_frame:#?}");
+}
+
+extern "x86-interrupt" fn timer_interrupt_handler(stack_frame: InterruptStackFrame) {
+    log::info!("Timer interrupt!");
+    unsafe { end_of_interrupt() };
+}
+
+extern "x86-interrupt" fn sci_interrupt_handler(stack_frame: InterruptStackFrame) {
+    let events = acpi_events::pending_events();
+    acpi_events::clear_events(events);
+    log::info!("SCI interrupt! {events:?}.");
+    unsafe { end_of_interrupt() };
 }
 
 pub fn init() {
@@ -47,6 +61,8 @@ pub fn init() {
     let idt = IDT.call_once(|| {
         let mut idt = InterruptDescriptorTable::new();
         idt.breakpoint.set_handler_fn(breakpoint_handler);
+        idt[34].set_handler_fn(timer_interrupt_handler);
+        idt[35].set_handler_fn(sci_interrupt_handler);
         idt
     });
     idt.load();

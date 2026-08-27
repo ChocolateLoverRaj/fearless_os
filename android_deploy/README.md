@@ -1,4 +1,4 @@
-Many android devices can behave as USB Mass Storage devices, which we can use to develop bootable disks without having to physically unplug them to plug them into another computer.
+Many android devices can behave as USB Mass Storage devices, which we can use to develop bootable disks without having to physically unplug them to plug them into another computer. Based off of [isodrive](https://github.com/nitanmarcel/isodrive).
 
 ## Requirements
 - An Android device that:

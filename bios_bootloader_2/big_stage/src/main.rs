@@ -3,7 +3,9 @@
 #![feature(abi_x86_interrupt, allocator_api)]
 extern crate alloc;
 
+mod acpi_events;
 mod acpi_handler;
+mod apic;
 mod bios_data_area;
 mod free_iterator;
 mod global_allocator;
@@ -29,11 +31,7 @@ use core::{
 
 use acpi::{
     AcpiTables,
-    aml::{
-        self, AmlError,
-        namespace::AmlName,
-        object::{Object, WrappedObject},
-    },
+    aml::{self, namespace::AmlName, object::Object},
     platform::AcpiPlatform,
     rsdp::Rsdp,
     sdt::fadt::Fadt,
@@ -41,7 +39,7 @@ use acpi::{
 use alloc::vec;
 use common::{big_stage_api::BigStageEntryInfo, bios::BiosFns, logger};
 use spin::Once;
-use x86_64::instructions::{hlt, interrupts::int3, port::Port};
+use x86_64::instructions::{hlt, interrupts::int3};
 
 use crate::{acpi_handler::AcpiHandler, bios_data_area::BiosDataArea};
 
@@ -121,15 +119,6 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     let bios_data_area = unsafe { NonNull::new(0x400 as *mut BiosDataArea).unwrap().as_ref() };
     log::trace!("bios_data_area: {:#X?}", bios_data_area);
 
-    // let ebda_pointer = bios_data_area.ebda_base_addr.get() as *mut u8;
-    // let ebda_len = 0xA0000 - bios_data_area.ebda_base_addr.get();
-    // let ebda = unsafe { slice::from_raw_parts(ebda_pointer, ebda_len as usize) };
-    // let possible_rsdp = &ebda[bios_data_area.ebda_base_addr.get().next_multiple_of(16) as usize..];
-    // let rsdp = possible_rsdp
-    //     .array_windows::<16>()
-    //     .find(|bytes| if bytes[..8] == b"RSD PTR\0" {
-    //         Rsdp::
-    //     });
     let rsdp = unsafe { Rsdp::search_for_on_bios(AcpiHandler {}) }.unwrap();
     log::info!("RSDP: {:#X?}", rsdp.get());
     let acpi_tables =
@@ -142,6 +131,9 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
 
     let platform = AcpiPlatform::new(acpi_tables, AcpiHandler {}).unwrap();
     log::info!("Got platform");
+
+    unsafe { apic::init(&platform) };
+
     platform.enter_acpi_mode().unwrap();
     log::info!("Entered ACPI mode");
 
@@ -161,29 +153,32 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     };
     log::info!("S5: slp_type_a={slp_type_a} slp_type_b={slp_type_b}.");
 
-    match aml.evaluate(
-        AmlName::from_str(r#"\_PTS"#).unwrap(),
-        vec![WrappedObject::new(Object::Integer(5))],
-    ) {
-        Ok(_) | Err(AmlError::ObjectDoesNotExist(_)) => Ok(()),
-        Err(e) => Err(e),
-    }
-    .unwrap();
-    log::info!("Called prepare to sleep.");
+    let fadt = platform.tables.find_table::<Fadt>().unwrap();
+    let sci_interrupt = fadt.sci_interrupt;
+    log::info!("SCI Interrupt IRQ: {sci_interrupt:#X}");
+    unsafe { acpi_events::init(platform) };
 
-    let mut port = Port::<u16>::new(
-        platform
-            .tables
-            .find_table::<Fadt>()
-            .unwrap()
-            .pm1a_control_block
-            .try_into()
-            .unwrap(),
-    );
-    let shutdown_value = (u16::try_from(*slp_type_a).unwrap() << 10) | (1 << 13);
-    unsafe { port.write(shutdown_value) };
-    log::info!("Did shutdown. You shouldn't see this");
+    // match aml.evaluate(
+    //     AmlName::from_str(r#"\_PTS"#).unwrap(),
+    //     vec![WrappedObject::new(Object::Integer(5))],
+    // ) {
+    //     Ok(_) | Err(AmlError::ObjectDoesNotExist(_)) => Ok(()),
+    //     Err(e) => Err(e),
+    // }
+    // .unwrap();
+    // log::info!("Called prepare to sleep.");
 
+    // platform
+    //     .registers
+    //     .pm1_control_registers
+    //     .set_sleep_typ((*slp_type_a).try_into().unwrap());
+    // platform
+    //     .registers
+    //     .pm1_control_registers
+    //     .set_bit(acpi::registers::Pm1ControlBit::SleepEnable, true);
+    // log::info!("Did shutdown. You shouldn't see this");
+
+    x86_64::instructions::interrupts::enable();
     loop {
         hlt();
     }

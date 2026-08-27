@@ -236,7 +236,10 @@ pub fn init(tables: &AcpiTables<AcpiHandler>) {
         PCIE_MAPPINGS.lock().insert(
             entry.pci_segment_group,
             PcieData {
-                info: (*entry).into(),
+                info: PcieInfo {
+                    bus_number_start: entry.bus_number_start,
+                    bus_number_end: entry.bus_number_end,
+                },
                 virt: virt_addr,
             },
         );
