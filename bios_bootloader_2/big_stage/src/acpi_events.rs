@@ -1,4 +1,4 @@
-use acpi::{platform::AcpiPlatform, registers::Pm1EventFlags};
+use acpi::{platform::AcpiPlatform, registers::Pm1EventFlags, sdt::fadt::Fadt};
 use spin::Once;
 
 use crate::acpi_handler::AcpiHandler;
@@ -6,6 +6,11 @@ use crate::acpi_handler::AcpiHandler;
 static ACPI_PLATFORM: Once<AcpiPlatform<AcpiHandler>> = Once::new();
 
 pub unsafe fn init(platform: AcpiPlatform<AcpiHandler>) {
+    let fadt = platform.tables.find_table::<Fadt>().unwrap();
+    let flags = fadt.flags;
+    let is_hw_reduced = flags.system_is_hw_reduced_acpi();
+    log::info!("ACPI: is_hw_reduced = {is_hw_reduced}.");
+
     platform
         .registers
         .pm1_event_registers

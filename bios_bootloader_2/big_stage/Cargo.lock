@@ -5,6 +5,8 @@ version = 4
 [[package]]
 name = "acpi"
 version = "6.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b763acdc1d85c36d61acf97a59938f23202d0e8efe45e8759de10c02db242744"
 dependencies = [
  "bit_field",
  "bitflags 2.13.1",
@@ -17,8 +19,7 @@ dependencies = [
 [[package]]
 name = "acpi"
 version = "6.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b763acdc1d85c36d61acf97a59938f23202d0e8efe45e8759de10c02db242744"
+source = "git+https://github.com/ChocolateLoverRaj/acpi?branch=pm1_events_breaking#a54e8f68a6f5d19055253d2e0db85ecbbd71ad86"
 dependencies = [
  "bit_field",
  "bitflags 2.13.1",
@@ -44,7 +45,7 @@ checksum = "0ab387a0c4143b4fd3804e193946e78c8ab16cf26c5fde2048e4ac3d618c3b64"
 name = "big_stage"
 version = "0.1.0"
 dependencies = [
- "acpi 6.1.1",
+ "acpi 6.1.1 (git+https://github.com/ChocolateLoverRaj/acpi?branch=pm1_events_breaking)",
  "arbitrary-int",
  "bitmap-allocator",
  "common",
