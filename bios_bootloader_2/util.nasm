@@ -106,11 +106,7 @@ table:
     dq int_15_long
     dq extended_read_long
     dq vesa_get_controller_info_long
-.dap_buffer:
-    times 16 db 0
-.int_15_buffer:
-    times 24 db 0
-.vbe_info_buffer:
+.buffer:
     times 512 db 0
 
 ALIGN 16
@@ -120,9 +116,13 @@ int_10_long:
     ENTER_REAL int_10_real
 [BITS 16]
 int_10_real:
-    mov ax, di
+    mov cx, di
+    mov si, table.buffer
+.loop:
+    lodsb
     mov ah, 0x0E
     int 0x10
+    loop .loop
     EXIT_REAL int_10_done
 [BITS 64]
 int_10_done:
@@ -140,7 +140,7 @@ int_15_real:
     mov edx, 0x534D4150
     mov eax, 0xE820
     mov ecx, 24
-    mov di, table.int_15_buffer
+    mov di, table.buffer
     int 0x15
     ; outputs: eax, ebx, cl, carry flag
     ; put carry flag into dl
@@ -166,7 +166,7 @@ extended_read_long:
     ENTER_REAL extended_read_real
 [BITS 16]
 extended_read_real:
-    mov si, table.dap_buffer
+    mov si, table.buffer
     mov ah, 0x42
     int 0x13
     setc al
@@ -186,7 +186,7 @@ vesa_get_controller_info_long:
 [BITS 16]
 vesa_get_controller_info_real:
     mov ax, 0x4F00
-    mov di, table.vbe_info_buffer
+    mov di, table.buffer
     int 0x10
     mov bx, ax
     EXIT_REAL vesa_get_controller_info_done

@@ -1,7 +1,7 @@
 use core::num::NonZero;
 
 use bitbybit::bitfield;
-use zerocopy::{FromBytes, transmute};
+use zerocopy::FromBytes;
 
 use crate::bios::BiosFns;
 
@@ -74,7 +74,9 @@ impl BiosFns {
             if output.eax != 0x534D4150 {
                 return Err(Int15Error::InvalidEax(output.eax));
             }
-            let data: Int15RawData = transmute!(self.table().int_15_buffer);
+            let data = Int15RawData::read_from_prefix(&self.table().buffer)
+                .unwrap()
+                .0;
             Int15Output {
                 data: Int15Data {
                     base_addr: data.base_addr,

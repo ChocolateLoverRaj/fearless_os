@@ -4,15 +4,15 @@ pub mod vesa;
 
 use core::{num::NonZero, ptr::NonNull};
 
-use zerocopy::{FromBytes, IntoBytes};
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 pub use self::disk::ExtendedReadError;
 use crate::{
     SECTOR_1,
     bios::{
-        disk::{DeviceAddressPacket, ExtendedReadFn},
+        disk::ExtendedReadFn,
         memory::Int15Fn,
-        vesa::{PrintCharFn, VbeInfoBlock, VesaGetInfoFn},
+        vesa::{PrintCharFn, VesaGetInfoFn},
     },
 };
 
@@ -23,9 +23,7 @@ struct UtilTable {
     int_15: Int15Fn,
     extended_read: ExtendedReadFn,
     vesa_get_info: VesaGetInfoFn,
-    dap_buffer: DeviceAddressPacket,
-    int_15_buffer: [u8; 24],
-    vbe_info_buffer: VbeInfoBlock,
+    buffer: [u8; 512],
 }
 
 #[derive(Clone, Copy)]
@@ -56,7 +54,7 @@ impl BiosFns {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, FromBytes, IntoBytes)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Immutable, KnownLayout)]
 pub struct RealModeAddr {
     offset: u16,
     segment: u16,

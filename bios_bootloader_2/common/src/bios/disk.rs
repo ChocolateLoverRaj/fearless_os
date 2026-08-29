@@ -1,6 +1,6 @@
 use core::num::NonZero;
 
-use zerocopy::{FromBytes, IntoBytes, TryFromBytes, try_transmute};
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, TryFromBytes, try_transmute};
 
 use crate::bios::{BiosFns, RealModeAddr};
 
@@ -21,7 +21,7 @@ pub struct ExtendedReadError {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, FromBytes, IntoBytes)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Immutable, KnownLayout)]
 pub(super) struct DeviceAddressPacket {
     packet_size: u8,
     _reserved_0: u8,
@@ -50,11 +50,9 @@ impl BiosFns {
             host_buffer_address: dest_addr,
             starting_lba: src_lba,
         };
-        log::debug!(
-            "device_address_packet: {device_address_packet:#X?} at {:p}",
-            &self.table().dap_buffer
-        );
-        self.table().dap_buffer = device_address_packet;
+        device_address_packet
+            .write_to_prefix(&mut self.table().buffer)
+            .unwrap();
         let ExtendedReadRawOutput { carry_flag, error } =
             try_transmute!((self.table().extended_read)(disk)).unwrap();
         if carry_flag || error.is_some() {

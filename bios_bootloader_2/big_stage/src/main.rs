@@ -108,7 +108,7 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     int3();
 
     let vbe_info = bios_fns.get_vbe_info().unwrap();
-    log::info!("vbe_info: {:#X?}", vbe_info);
+    log::info!("VBE version: {:#X?}", vbe_info.vbe_version);
 
     log::info!("searching for bios data area");
     let bios_data_area = unsafe { NonNull::new(0x400 as *mut BiosDataArea).unwrap().as_ref() };
