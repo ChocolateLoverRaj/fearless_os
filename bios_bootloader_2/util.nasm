@@ -106,6 +106,8 @@ table:
     dq int_15_long
     dq extended_read_long
     dq vesa_get_controller_info_long
+    dq vesa_get_mode_info_long
+    dq vesa_set_mode_long
 .buffer:
     times 512 db 0
 
@@ -185,13 +187,51 @@ vesa_get_controller_info_long:
     ENTER_REAL vesa_get_controller_info_real
 [BITS 16]
 vesa_get_controller_info_real:
-    mov ax, 0x4F00
+    mov ax, 0x4f00
     mov di, table.buffer
     int 0x10
     mov bx, ax
     EXIT_REAL vesa_get_controller_info_done
 [BITS 64]
 vesa_get_controller_info_done:
+    LOAD_LONG_ENV
+    mov ax, bx
+    ret
+
+ALIGN 16
+[BITS 64]
+vesa_get_mode_info_long:
+    LOAD_REAL_ENV
+    ENTER_REAL vesa_get_mode_info_real
+[BITS 16]
+vesa_get_mode_info_real:
+    mov cx, di
+    mov ax, 0x4f01
+    mov di, table.buffer
+    int 0x10
+    mov bx, ax
+    EXIT_REAL vesa_get_mode_info_done
+[BITS 64]
+vesa_get_mode_info_done:
+    LOAD_LONG_ENV
+    mov ax, bx
+    ret
+
+ALIGN 16
+[BITS 64]
+vesa_set_mode_long:
+    LOAD_REAL_ENV
+    ENTER_REAL vesa_set_mode_real
+[BITS 16]
+vesa_set_mode_real:
+    mov bx, di
+    mov di, table.buffer
+    mov ax, 0x4f02
+    int 0x10
+    mov bx, ax
+    EXIT_REAL vesa_set_mode_done
+[BITS 64]
+vesa_set_mode_done:
     LOAD_LONG_ENV
     mov ax, bx
     ret

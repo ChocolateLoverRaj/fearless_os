@@ -17,7 +17,6 @@ mod pat;
 mod physical_memory;
 mod range_utils;
 mod scratch_tables;
-mod virtual_memory;
 mod vmm;
 
 use core::{
@@ -29,7 +28,15 @@ use core::{
 };
 
 use acpi::{AcpiTables, platform::AcpiPlatform, rsdp::Rsdp, sdt::fadt::Fadt};
-use common::{big_stage_api::BigStageEntryInfo, bios::BiosFns, logger};
+use arbitrary_int::u9;
+use common::{
+    big_stage_api::BigStageEntryInfo,
+    bios::{
+        BiosFns,
+        vesa::{ModeInfo, VesaModeAttributes},
+    },
+    logger,
+};
 use spin::Once;
 use x86_64::instructions::{hlt, interrupts::int3};
 
@@ -108,7 +115,52 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     int3();
 
     let vbe_info = bios_fns.get_vbe_info().unwrap();
-    log::info!("VBE version: {:#X?}", vbe_info.vbe_version);
+    // log::info!("VBE: {vbe_info:#X?}");
+    let vbe_version = vbe_info.info().vbe_version;
+    log::info!("VBE version: {vbe_version:#X?}.");
+    if vbe_version != [0x00, 0x03] {
+        panic!("Unsupported VESA version: {vbe_version:#X?}.",);
+    }
+
+    let mut best_mode = None::<(u9, ModeInfo)>;
+    for video_mode in vbe_info.mode_list() {
+        let info = bios_fns.vesa_get_mode_info(video_mode).unwrap();
+        log::debug!("Video mode: {video_mode:#X}: {info:#X?}");
+        let attributes = VesaModeAttributes::new_with_raw_value(info.mode_attributs.get());
+        if attributes.mode_type() && attributes.linear_frame_buffer_mode_available() {
+            let width = info.x_resolution.get();
+            let height = info.y_resolution.get();
+            let bpp = info.bits_per_pixel;
+            log::debug!("Graphics mode: {width}x{height}, {bpp}-bit color");
+            if best_mode.is_none_or(|(_, best_info)| {
+                width >= best_info.x_resolution.get()
+                    && height >= best_info.y_resolution.get()
+                    && bpp >= best_info.bits_per_pixel
+            }) {
+                best_mode = Some((video_mode, info));
+            }
+        }
+    }
+    if let Some((mode, info)) = best_mode {
+        let width = info.x_resolution.get();
+        let height = info.y_resolution.get();
+        let bpp = info.bits_per_pixel;
+        let ptr = info.phys_base_ptr.get();
+        log::info!("Best mode: {mode}, {width}x{height}, {bpp}-bit color, {ptr:#X}");
+        // bootloader_table
+        //     .vesa_set_mode
+        //     .call(u9::new(mode), true)
+        //     .unwrap();
+        // let ptr = usize::try_from(info.phys_base_ptr.get()).unwrap() as *mut u8;
+        // let bytes = usize::try_from(info.lin_bytes_per_scan.get()).unwrap()
+        //     * usize::try_from(height).unwrap()
+        //     * usize::try_from(bpp).unwrap();
+        // unsafe { ptr.write_bytes(0x67, bytes) };
+
+        // log::info!("Set mode");
+    } else {
+        log::info!("No suitable graphics mode found");
+    }
 
     log::info!("searching for bios data area");
     let bios_data_area = unsafe { NonNull::new(0x400 as *mut BiosDataArea).unwrap().as_ref() };

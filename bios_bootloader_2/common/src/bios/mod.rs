@@ -1,18 +1,18 @@
 pub mod disk;
 pub mod memory;
+pub mod real_mode_addr;
 pub mod vesa;
 
 use core::{num::NonZero, ptr::NonNull};
 
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
-
 pub use self::disk::ExtendedReadError;
+pub use self::real_mode_addr::RealModeAddr;
 use crate::{
     SECTOR_1,
     bios::{
         disk::ExtendedReadFn,
         memory::Int15Fn,
-        vesa::{PrintCharFn, VesaGetInfoFn},
+        vesa::{PrintCharFn, VesaGetInfoFn, VesaGetModeFn, VesaSetModeFn},
     },
 };
 
@@ -23,6 +23,8 @@ struct UtilTable {
     int_15: Int15Fn,
     extended_read: ExtendedReadFn,
     vesa_get_info: VesaGetInfoFn,
+    vesa_get_mode: VesaGetModeFn,
+    vesa_set_mode: VesaSetModeFn,
     buffer: [u8; 512],
 }
 
@@ -50,28 +52,5 @@ impl BiosFns {
         }
 
         Self { table: util_table }
-    }
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Immutable, KnownLayout)]
-pub struct RealModeAddr {
-    offset: u16,
-    segment: u16,
-}
-
-#[derive(Debug)]
-pub struct NotAddressableFromRealMode;
-
-impl TryFrom<u32> for RealModeAddr {
-    type Error = NotAddressableFromRealMode;
-
-    fn try_from(value: u32) -> Result<Self, Self::Error> {
-        Ok({
-            let segment = u16::try_from(value / 16).unwrap_or(u16::MAX);
-            let offset = u16::try_from(value - u32::from(segment) * 16)
-                .map_err(|_| NotAddressableFromRealMode)?;
-            Self { segment, offset }
-        })
     }
 }

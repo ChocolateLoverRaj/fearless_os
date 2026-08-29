@@ -5,7 +5,7 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, TryFromBytes, try_t
 use crate::bios::{BiosFns, RealModeAddr};
 
 /// args: dl
-pub(super) type ExtendedReadFn = fn(u8) -> u16;
+pub(super) type ExtendedReadFn = extern "C" fn(u8) -> u16;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, TryFromBytes)]
