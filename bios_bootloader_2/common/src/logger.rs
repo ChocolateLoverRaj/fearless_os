@@ -6,7 +6,7 @@ use spin::Once;
 use crate::{bios::BiosFns, writer_with_cr::WriterWithCr};
 
 struct Logger {
-    bios_fns: &'static BiosFns,
+    bios_fns: BiosFns,
 }
 
 static LOGGER: Once<Logger> = Once::new();
@@ -18,12 +18,12 @@ impl Log for Logger {
 
     fn log(&self, record: &log::Record) {
         struct Int10Writer {
-            bios_fns: &'static BiosFns,
-        };
+            bios_fns: BiosFns,
+        }
         impl Write for Int10Writer {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 for &b in s.as_bytes() {
-                    self.bios_fns.int_10(b);
+                    self.bios_fns.print_char(b);
                 }
                 Ok(())
             }
@@ -38,7 +38,7 @@ impl Log for Logger {
     fn flush(&self) {}
 }
 
-pub fn init(bios_functions: &'static BiosFns) {
+pub fn init(bios_functions: BiosFns) {
     set_max_level(log::LevelFilter::Info);
     set_logger(LOGGER.call_once(|| Logger {
         bios_fns: bios_functions,

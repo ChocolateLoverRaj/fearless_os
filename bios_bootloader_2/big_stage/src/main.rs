@@ -25,18 +25,10 @@ use core::{
     num::NonZero,
     panic::PanicInfo,
     ptr::NonNull,
-    str::FromStr,
     sync::atomic::{AtomicU16, Ordering},
 };
 
-use acpi::{
-    AcpiTables,
-    aml::{self, namespace::AmlName, object::Object},
-    platform::AcpiPlatform,
-    rsdp::Rsdp,
-    sdt::fadt::Fadt,
-};
-use alloc::vec;
+use acpi::{AcpiTables, platform::AcpiPlatform, rsdp::Rsdp, sdt::fadt::Fadt};
 use common::{big_stage_api::BigStageEntryInfo, bios::BiosFns, logger};
 use spin::Once;
 use x86_64::instructions::{hlt, interrupts::int3};
@@ -102,18 +94,21 @@ static BIOS_FNS: Once<BiosFns> = Once::new();
 
 unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     // Safety: BIOS fns are still mapped and the old real-mode stack is completely free for us to use
-    let bios_fns = BIOS_FNS.call_once(|| unsafe {
+    let bios_fns = *BIOS_FNS.call_once(|| unsafe {
         BiosFns::new(Some(
             NonZero::new(ORIGINAL_STACK_POINTER.load(Ordering::Relaxed)).unwrap(),
         ))
     });
     logger::init(bios_fns);
     log::info!("Hello from big stage. {info:#X?}.");
-    unsafe { memory::init(info) };
+    unsafe { memory::init(info, bios_fns) };
     interrupts::init();
     log::info!("initialized interrupts.");
 
     int3();
+
+    let vbe_info = bios_fns.get_vbe_info().unwrap();
+    log::info!("vbe_info: {:#X?}", vbe_info);
 
     log::info!("searching for bios data area");
     let bios_data_area = unsafe { NonNull::new(0x400 as *mut BiosDataArea).unwrap().as_ref() };

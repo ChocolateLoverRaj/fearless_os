@@ -105,8 +105,13 @@ table:
     dq int_10_long
     dq int_15_long
     dq extended_read_long
+    dq vesa_get_controller_info_long
+.dap_buffer:
+    times 16 db 0
 .int_15_buffer:
     times 24 db 0
+.vbe_info_buffer:
+    times 512 db 0
 
 ALIGN 16
 [BITS 64]
@@ -157,11 +162,11 @@ ALIGN 16
 [BITS 64]
 extended_read_long:
     LOAD_REAL_ENV
-    push di
+    mov dx, di
     ENTER_REAL extended_read_real
 [BITS 16]
 extended_read_real:
-    pop ds
+    mov si, table.dap_buffer
     mov ah, 0x42
     int 0x13
     setc al
@@ -171,6 +176,24 @@ extended_read_real:
 extended_read_done:
     mov ax, bx
     LOAD_LONG_ENV
+    ret
+
+ALIGN 16
+[BITS 64]
+vesa_get_controller_info_long:
+    LOAD_REAL_ENV
+    ENTER_REAL vesa_get_controller_info_real
+[BITS 16]
+vesa_get_controller_info_real:
+    mov ax, 0x4F00
+    mov di, table.vbe_info_buffer
+    int 0x10
+    mov bx, ax
+    EXIT_REAL vesa_get_controller_info_done
+[BITS 64]
+vesa_get_controller_info_done:
+    LOAD_LONG_ENV
+    mov ax, bx
     ret
 
 ALIGN 4

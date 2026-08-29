@@ -13,7 +13,7 @@ arbitrary-int = { version = "2.1.1", default-features = false }
 bitbybit = "2.0.1"
 common = { version = "0.1.0", path = "../common" }
 log = "0.4.33"
-spin = { version = "0.12.2", default-features = false, features = ["once"] }
+spin = { version = "0.12.2", default-features = false, features = ["once", "spin_mutex", "mutex"] }
 unicode-segmentation = "1.13.3"
 x86_64 = { version = "0.15.5", default-features = false, features = [
     "instructions",

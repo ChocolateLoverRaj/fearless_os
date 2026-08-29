@@ -1,5 +1,3 @@
-use core::num::NonZero;
-
 use zerocopy::little_endian::U16;
 
 #[derive(Debug, Clone, Copy)]

@@ -9,7 +9,7 @@ bitbybit = "2.0.1"
 heapless = "0.9.3"
 log = "0.4.33"
 raw-cpuid = "11.6.0"
-spin = { version = "0.12.2", default-features = false, features = ["once"] }
+spin = { version = "0.12.2", default-features = false, features = ["mutex", "once", "spin_mutex"] }
 unicode-segmentation = "1.13.3"
 x86_64 = { version = "0.15.5", default-features = false, git = "https://github.com/rust-osdev/x86_64", branch = "next" }
 zerocopy = { version = "0.8.55", features = ["derive"] }

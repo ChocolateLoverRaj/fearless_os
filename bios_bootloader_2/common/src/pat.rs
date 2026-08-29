@@ -1,5 +1,5 @@
 use arbitrary_int::u3;
-use x86_64::registers::model_specific::{Pat, PatMemoryType};
+use x86_64::registers::model_specific::PatMemoryType;
 
 pub const OUR_PAT: [PatMemoryType; 8] = [
     // Keep the 4 as they would be without PAT

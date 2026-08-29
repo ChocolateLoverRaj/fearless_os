@@ -3,13 +3,13 @@ use core::{ops::Range, ptr::addr_of};
 use common::{
     OFFSET_MAP_VIRT_ADDR,
     big_stage_api::BigStageEntryInfo,
-    bios::MemoryIterator,
+    bios::BiosFns,
     paging::{LeafMapping, LeafMappingFlags, LeafMappingSize, MapError, TopLevelPageTable},
     pat::WRITE_BACK_INDEX,
 };
 use heapless::Vec;
 use spin::{Mutex, Once};
-use x86_64::registers::control::{Cr3, Cr4, Cr4Flags, Efer, EferFlags};
+use x86_64::registers::control::{Cr3, Efer, EferFlags};
 
 use crate::{
     __bss_end, __start,
@@ -33,14 +33,15 @@ static MEMORY: Once<Mutex<Memory>> = Once::new();
 /// # Safety
 ///
 /// Must be called exactly once.
-pub unsafe fn init(info: &BigStageEntryInfo) {
+pub unsafe fn init(info: &BigStageEntryInfo, bios_fns: BiosFns) {
     // Safety: doesn't break any existing mappings
     unsafe { pat::init() };
 
     // Enable no-execute flag
     unsafe { Efer::update(|efer| efer.insert(EferFlags::NO_EXECUTE_ENABLE)) };
 
-    let mut mem_entries = MemoryIterator::default()
+    let mut mem_entries = bios_fns
+        .memory()
         .collect::<Result<heapless::Vec<_, 32>, _>>()
         .unwrap();
 

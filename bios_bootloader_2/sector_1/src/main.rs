@@ -18,10 +18,10 @@ use common::{
     },
     pat::WRITE_BACK_INDEX,
 };
-use spin::Once;
+use spin::{Mutex, Once};
 use x86_64::{instructions::hlt, registers::control::Cr3};
 
-use common::bios::{MemoryIterator, RealModeAddr, extended_read};
+use common::bios::RealModeAddr;
 
 unsafe extern "C" {
     static __bss_start: *const u8;
@@ -60,10 +60,10 @@ struct RustStartRet {
 
 unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> RustStartRet {
     static BIOS_FNS: Once<BiosFns> = Once::new();
-    let bios_fns = BIOS_FNS.call_once(|| unsafe { BiosFns::new(None) });
-    logger::init(&bios_fns);
+    let bios_fns = *BIOS_FNS.call_once(|| unsafe { BiosFns::new(None) });
+    logger::init(bios_fns);
     log::info!("Hello from small Rust. DL={dl:#X}. Partition start LBA: {partition_start_lba:#X}.");
-    for m in MemoryIterator::default() {
+    for m in bios_fns.memory() {
         let m = m.unwrap();
         log::info!("Memory entry: {:#X?}", m);
     }
@@ -92,19 +92,16 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> R
     let buffer_len = 512 * 127;
     let mut read_buffer_addr = None;
     let mut next_stage_phys_addr = None;
-    for m in MemoryIterator::default()
-        .map(|m| m.unwrap())
-        .filter_map(|m| {
-            if m.is_usable() {
-                Some(UsableMem {
-                    start: m.base_addr,
-                    len: m.len,
-                })
-            } else {
-                None
-            }
-        })
-    {
+    for m in bios_fns.memory().map(|m| m.unwrap()).filter_map(|m| {
+        if m.is_usable() {
+            Some(UsableMem {
+                start: m.base_addr,
+                len: m.len,
+            })
+        } else {
+            None
+        }
+    }) {
         if read_buffer_addr.is_some() && next_stage_phys_addr.is_some() {
             break;
         }
@@ -232,7 +229,7 @@ unsafe extern "C" fn rust_start(_: usize, partition_start_lba: u64, dl: u8) -> R
     while sectors_copied < total_sectors_to_copy {
         let sectors_to_copy_this_iteration = min(total_sectors_to_copy - sectors_copied, 127);
         unsafe {
-            extended_read(
+            bios_fns.extended_read(
                 dl,
                 starting_lba + sectors_copied,
                 read_buffer_real_addr,
