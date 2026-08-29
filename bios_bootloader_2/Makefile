@@ -55,9 +55,10 @@ run: $(BUILD_DIR)/disk.img
 
 run_with_graphic: $(BUILD_DIR)/disk.img
 	qemu-system-x86_64 \
-        --machine q35 -d int -D $(BUILD_DIR)/qemu.log \
-        --no-reboot \
-        -drive file=$(BUILD_DIR)/disk.img,format=raw,if=ide,snapshot=on
+       --machine q35,accel=kvm:whpx:hvf:tcg -d int,cpu_reset -D $(BUILD_DIR)/qemu.log -m 4G \
+       --cpu qemu64,+la57 \
+       --no-reboot \
+       -drive file=$(BUILD_DIR)/disk.img,format=raw,if=ide,snapshot=on \
 
 ndisasm: $(BUILD_DIR)/sector_0.bin
 	ndisasm -o 0x7C00 $(BUILD_DIR)/sector_0.bin
