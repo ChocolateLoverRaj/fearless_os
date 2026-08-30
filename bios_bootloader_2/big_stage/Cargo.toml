@@ -19,6 +19,7 @@ force-send-sync = "2.0.0"
 heapless = "0.9.3"
 log = "0.4.33"
 nodit = { version = "0.10.0", default-features = false }
+owo-colors = "4.4.0"
 pic8259 = "0.11.0"
 spin = "0.12.2"
 spinning_top = "0.3.0"

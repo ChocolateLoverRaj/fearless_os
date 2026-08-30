@@ -11,12 +11,14 @@ mod config;
 mod frame_buffer;
 mod frame_buffer_embedded_graphics;
 mod frame_buffer_info;
+mod frame_buffer_log_target;
 mod frame_buffer_writer;
 mod free_iterator;
 mod global_allocator;
 mod initial_pmm;
 mod interrupts;
 mod linked_list;
+mod log_target;
 mod logger;
 mod memory;
 mod pat;
@@ -24,6 +26,8 @@ mod physical_memory;
 mod range_utils;
 mod rgb_pixel_info;
 mod scratch_tables;
+mod uart_log_target;
+mod vesa_text_log_target;
 mod vmm;
 
 use core::{
@@ -36,6 +40,7 @@ use core::{
 
 use acpi::{AcpiTables, platform::AcpiPlatform, rsdp::Rsdp, sdt::fadt::Fadt};
 use common::{big_stage_api::BigStageEntryInfo, bios::BiosFns};
+use log::logger;
 use spin::Once;
 use uart_16550::Uart16550Tty;
 use x86_64::instructions::{hlt, interrupts::int3};
@@ -124,6 +129,7 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
         logger::init_uart(
             unsafe { Uart16550Tty::new_port(io_port.get(), Default::default()) }.unwrap(),
         );
+        log::info!("Set logging to UART");
     }
 
     frame_buffer::init(bios_fns);
@@ -151,6 +157,7 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     log::info!("SCI Interrupt IRQ: {sci_interrupt:#X}");
     unsafe { acpi_events::init(platform) };
 
+    logger().flush();
     x86_64::instructions::interrupts::enable();
     loop {
         hlt();
@@ -160,6 +167,7 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
 #[panic_handler]
 fn panic_handler(panic_info: &PanicInfo) -> ! {
     log::error!("{panic_info}");
+    logger().flush();
     loop {
         hlt();
     }

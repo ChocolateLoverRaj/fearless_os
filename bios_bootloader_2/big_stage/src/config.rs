@@ -7,6 +7,11 @@ pub struct ScreenConfig {
     pub bpp: u8,
 }
 
+pub enum ScreenFlush {
+    EveryLog,
+    Manually,
+}
+
 pub struct Config {
     pub preffered_resolution: Option<ScreenConfig>,
     pub screen_log_level: LevelFilter,
@@ -14,6 +19,7 @@ pub struct Config {
     /// If true, will log to the screen and not UART, even if a UART is supported.
     pub prefer_screen_logging: bool,
     pub font: MonoFont<'static>,
+    pub screen_flush: ScreenFlush,
 }
 
 pub const CONFIG: Config = Config {
@@ -24,6 +30,7 @@ pub const CONFIG: Config = Config {
     }),
     screen_log_level: LevelFilter::Info,
     serial_log_level: LevelFilter::Debug,
-    prefer_screen_logging: false,
+    prefer_screen_logging: true,
     font: mono_font::iso_8859_16::FONT_6X13,
+    screen_flush: ScreenFlush::Manually,
 };

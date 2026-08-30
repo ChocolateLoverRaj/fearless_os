@@ -23,6 +23,7 @@ use x86_64::{
 use crate::{
     acpi_events::{self, platform},
     apic::end_of_interrupt,
+    logger,
 };
 
 pub struct Gdt {
@@ -38,10 +39,12 @@ static GDT: Once<Gdt> = Once::new();
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
     log::debug!("Breakpoint! Stack frame: {stack_frame:#?}");
+    logger().flush();
 }
 
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
     log::info!("Timer interrupt!");
+    logger().flush();
     unsafe { end_of_interrupt() };
 }
 
@@ -75,6 +78,7 @@ extern "x86-interrupt" fn sci_interrupt_handler(_stack_frame: InterruptStackFram
         }
         .unwrap();
         log::info!("Called prepare to sleep.");
+        logger().flush();
         platform
             .registers
             .pm1_control_registers
@@ -84,6 +88,7 @@ extern "x86-interrupt" fn sci_interrupt_handler(_stack_frame: InterruptStackFram
             .pm1_control_registers
             .set_bit(acpi::registers::Pm1ControlBit::SleepEnable, true);
         log::info!("Did shutdown. You shouldn't see this");
+        logger().flush();
     }
     unsafe { end_of_interrupt() };
 }
