@@ -1,7 +1,0 @@
-#![no_std]
-pub const RESERVED_SIZE: u16 = 0x5000;
-pub const STACK_SIZE: u16 = 0x1000;
-pub const STACK_TOP_ADDR: u16 = RESERVED_SIZE + STACK_SIZE;
-pub const PAGE_TABLES_ADDR: u16 = STACK_TOP_ADDR;
-pub const FIRST_SECTOR_ADDR: u16 = PAGE_TABLES_ADDR + 0x1000 * 3;
-pub const STAGE_2_ADDR: u16 = FIRST_SECTOR_ADDR + 0x200;
