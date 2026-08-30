@@ -13,11 +13,14 @@ unsafe impl Source for TalcSource {
     ) -> Result<(), ()> {
         let size = layout
             .size()
-            .next_multiple_of(0x1000)
+            .next_multiple_of(0x200000)
             .next_multiple_of(layout.align());
         let align = u64::try_from(layout.align()).unwrap().max(0x1000);
 
-        let phy_start = alloc_phys(size.try_into().unwrap(), align).ok_or(())?;
+        log::info!("allocating {size:#X} with align {align:#X}.");
+        let phy_start = alloc_phys(size.try_into().unwrap(), align)
+            .ok_or(())
+            .inspect_err(|_| log::warn!("failed to alloc phys mem for global allocator"))?;
 
         unsafe { talc.claim((OFFSET_MAP_VIRT_ADDR + phy_start) as *mut _, size) };
         Ok(())

@@ -5,13 +5,14 @@ use spin::Once;
 
 use crate::{bios::BiosFns, writer_with_cr::WriterWithCr};
 
-struct Logger {
+pub struct VesaConsoleLogger {
     bios_fns: BiosFns,
 }
 
-static LOGGER: Once<Logger> = Once::new();
+static LOGGER: Once<VesaConsoleLogger> = Once::new();
+static DYN_LOGGER: Once<&'static dyn Log> = Once::new();
 
-impl Log for Logger {
+impl Log for VesaConsoleLogger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         metadata.level() <= max_level()
     }
@@ -58,8 +59,10 @@ impl Log for Logger {
 
 pub fn init(bios_functions: BiosFns) {
     set_max_level(log::LevelFilter::Info);
-    set_logger(LOGGER.call_once(|| Logger {
-        bios_fns: bios_functions,
+    set_logger(DYN_LOGGER.call_once(|| {
+        LOGGER.call_once(|| VesaConsoleLogger {
+            bios_fns: bios_functions,
+        })
     }))
     .unwrap();
 }

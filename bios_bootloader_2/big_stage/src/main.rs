@@ -7,16 +7,22 @@ mod acpi_events;
 mod acpi_handler;
 mod apic;
 mod bios_data_area;
+mod config;
 mod frame_buffer;
+mod frame_buffer_embedded_graphics;
+mod frame_buffer_info;
+mod frame_buffer_writer;
 mod free_iterator;
 mod global_allocator;
 mod initial_pmm;
 mod interrupts;
 mod linked_list;
+mod logger;
 mod memory;
 mod pat;
 mod physical_memory;
 mod range_utils;
+mod rgb_pixel_info;
 mod scratch_tables;
 mod vmm;
 
@@ -29,16 +35,9 @@ use core::{
 };
 
 use acpi::{AcpiTables, platform::AcpiPlatform, rsdp::Rsdp, sdt::fadt::Fadt};
-use arbitrary_int::u9;
-use common::{
-    big_stage_api::BigStageEntryInfo,
-    bios::{
-        BiosFns,
-        vesa::{ModeInfo, VesaModeAttributes},
-    },
-    logger,
-};
+use common::{big_stage_api::BigStageEntryInfo, bios::BiosFns};
 use spin::Once;
+use uart_16550::Uart16550Tty;
 use x86_64::instructions::{hlt, interrupts::int3};
 
 use crate::{acpi_handler::AcpiHandler, bios_data_area::BiosDataArea};
@@ -115,11 +114,19 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
 
     int3();
 
-    frame_buffer::init(bios_fns);
-
     log::info!("searching for bios data area");
     let bios_data_area = unsafe { NonNull::new(0x400 as *mut BiosDataArea).unwrap().as_ref() };
     log::trace!("bios_data_area: {:#X?}", bios_data_area);
+    let io_ports = bios_data_area.io_ports_com;
+    log::info!("io_ports: {io_ports:#X?}");
+    if let Some(io_port) = io_ports.iter().find_map(|port| NonZero::new(port.get())) {
+        log::info!("Using COM port {io_port:#X}.");
+        logger::init_uart(
+            unsafe { Uart16550Tty::new_port(io_port.get(), Default::default()) }.unwrap(),
+        );
+    }
+
+    frame_buffer::init(bios_fns);
 
     let rsdp = unsafe { Rsdp::search_for_on_bios(AcpiHandler {}) }.unwrap();
     log::info!("RSDP: {:#X?}", rsdp.get());

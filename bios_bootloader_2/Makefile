@@ -59,6 +59,7 @@ run_with_graphic: $(BUILD_DIR)/disk.img
        --cpu qemu64,+la57 \
        --no-reboot \
        -drive file=$(BUILD_DIR)/disk.img,format=raw,if=ide,snapshot=on \
+       -serial mon:stdio
 
 ndisasm: $(BUILD_DIR)/sector_0.bin
 	ndisasm -o 0x7C00 $(BUILD_DIR)/sector_0.bin
