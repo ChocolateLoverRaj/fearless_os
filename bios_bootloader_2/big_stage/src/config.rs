@@ -13,12 +13,16 @@ pub enum ScreenFlush {
 }
 
 pub struct Config {
+    /// Useful for testing a specific resolution in virtual machines,
+    /// or for using a smaller resolution in virtual machines so the window isn't too big.
     pub preffered_resolution: Option<ScreenConfig>,
     pub screen_log_level: LevelFilter,
     pub serial_log_level: LevelFilter,
     /// If true, will log to the screen and not UART, even if a UART is supported.
+    /// This is useful for testing screen logging in a virtual machine.
     pub prefer_screen_logging: bool,
     pub font: MonoFont<'static>,
+    /// Writing to the framebuffer can be slow, so manually flushing can save time.
     pub screen_flush: ScreenFlush,
 }
 
@@ -30,7 +34,7 @@ pub const CONFIG: Config = Config {
     }),
     screen_log_level: LevelFilter::Info,
     serial_log_level: LevelFilter::Debug,
-    prefer_screen_logging: true,
+    prefer_screen_logging: false,
     font: mono_font::iso_8859_16::FONT_6X13,
     screen_flush: ScreenFlush::Manually,
 };
