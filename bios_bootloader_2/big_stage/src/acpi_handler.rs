@@ -1,21 +1,23 @@
-use core::ptr::NonNull;
+use core::{hint::spin_loop, num::NonZero, ptr::NonNull};
 
-use acpi::{AcpiTables, Handler, PciAddress, sdt::mcfg::Mcfg};
+use acpi::{AcpiTables, Handler, HpetInfo, PciAddress, sdt::mcfg::Mcfg};
 use alloc::collections::btree_map::BTreeMap;
 use arbitrary_int::{u3, u5, u12};
 use common::{OFFSET_MAP_VIRT_ADDR, paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
+use ez_hpet::{HPET_MMIO_SIZE, Hpet};
 use ez_pci::{PciAccess, PciReadWriteValue, PcieInfo};
-use spin::Mutex;
+use spin::{Mutex, Once};
 use x86_64::instructions::port::Port;
 
 use crate::memory::map_phys;
 
-struct PcieData {
-    info: PcieInfo,
-    virt: u64,
+pub struct PcieData {
+    pub info: PcieInfo,
+    pub virt: u64,
 }
 
-static PCIE_MAPPINGS: Mutex<BTreeMap<u16, PcieData>> = Mutex::new(BTreeMap::new());
+pub static PCIE_MAPPINGS: Mutex<BTreeMap<u16, PcieData>> = Mutex::new(BTreeMap::new());
+pub static HPET: Once<Hpet<'static>> = Once::new();
 
 const ACPI_MAPPING_FLAGS: LeafMappingFlags = LeafMappingFlags {
     executable: false,
@@ -200,11 +202,22 @@ impl Handler for AcpiHandler {
     }
 
     fn stall(&self, microseconds: u64) {
-        todo!()
+        let hpet = HPET.get().unwrap();
+        let ticks_per_us = 1_000_000_000 / hpet.main_counter_tick_period();
+        let ticks_to_sleep = microseconds * u64::from(ticks_per_us);
+        let sleep_start_counter_value = hpet.main_counter_value();
+        while hpet
+            .main_counter_value()
+            .wrapping_sub(sleep_start_counter_value)
+            < ticks_to_sleep
+        {
+            spin_loop();
+        }
     }
 
     fn sleep(&self, milliseconds: u64) {
-        todo!()
+        // TODO: Don't busy loop
+        self.stall(milliseconds * 1000);
     }
 
     fn create_mutex(&self) -> acpi::Handle {
@@ -222,7 +235,7 @@ impl Handler for AcpiHandler {
     }
 }
 
-const SEGMENT_MAPPED_LEN: u64 = 0x10000000;
+pub const SEGMENT_MAPPED_LEN: u64 = 0x10000000;
 
 pub fn init(tables: &AcpiTables<AcpiHandler>) {
     // Find MCFG
@@ -244,4 +257,21 @@ pub fn init(tables: &AcpiTables<AcpiHandler>) {
             },
         );
     }
+
+    let hpet_info = HpetInfo::new(tables).unwrap();
+    log::info!("HPET Info: {hpet_info:#X?}");
+    let hpet_addr = map_phys(
+        hpet_info.base_address.try_into().unwrap(),
+        HPET_MMIO_SIZE.try_into().unwrap(),
+        LeafMappingFlags {
+            writable: true,
+            user_mode_accessible: false,
+            executable: false,
+            pat_index: STRONG_UNCACHEABLE_INDEX,
+        },
+    )
+    .unwrap();
+    let mut hpet = unsafe { Hpet::new(NonZero::new(hpet_addr.try_into().unwrap()).unwrap()) };
+    hpet.set_enable(true);
+    HPET.call_once(|| hpet);
 }

@@ -51,6 +51,9 @@ run: $(BUILD_DIR)/disk.img
         --cpu qemu64,+la57 \
         --no-reboot \
         -drive file=$(BUILD_DIR)/disk.img,format=raw,if=ide,snapshot=on \
+        -device usb-ehci,id=ehci \
+        -device usb-mouse,bus=ehci.0 \
+        -trace "usb_ehci_*" \
         --nographic
 
 run_with_graphic: $(BUILD_DIR)/disk.img

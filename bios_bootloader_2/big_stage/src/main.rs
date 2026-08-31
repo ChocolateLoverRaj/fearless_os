@@ -35,17 +35,42 @@ use core::{
     num::NonZero,
     panic::PanicInfo,
     ptr::NonNull,
+    str::FromStr,
     sync::atomic::{AtomicU16, Ordering},
 };
 
-use acpi::{AcpiTables, platform::AcpiPlatform, rsdp::Rsdp, sdt::fadt::Fadt};
-use common::{big_stage_api::BigStageEntryInfo, bios::BiosFns};
+use acpi::{
+    AcpiTables, HpetInfo,
+    aml::{
+        self,
+        namespace::AmlName,
+        pci_routing::{PciRoutingTable, Pin},
+    },
+    platform::AcpiPlatform,
+    rsdp::Rsdp,
+    sdt::{fadt::Fadt, mcfg::Mcfg},
+};
+use alloc::vec;
+use arbitrary_int::{traits::Integer, u3, u5};
+use common::{
+    big_stage_api::BigStageEntryInfo,
+    bios::BiosFns,
+    paging::LeafMappingFlags,
+    pat::{STRONG_UNCACHEABLE_INDEX, WRITE_THROUGH_INDEX},
+};
+use ez_ehci::{MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS};
+use ez_hpet::{HPET_MMIO_SIZE, Hpet};
+use ez_pci::{BarWithSize, MemoryBarAddrAndSizeU64, PciAccess};
 use log::logger;
 use spin::Once;
 use uart_16550::Uart16550Tty;
 use x86_64::instructions::{hlt, interrupts::int3};
 
-use crate::{acpi_handler::AcpiHandler, bios_data_area::BiosDataArea};
+use crate::{
+    acpi_handler::{AcpiHandler, PCIE_MAPPINGS, SEGMENT_MAPPED_LEN},
+    bios_data_area::BiosDataArea,
+    memory::{alloc_phys, map_phys},
+};
 
 unsafe extern "C" {
     static __start: *const u8;
@@ -155,7 +180,125 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     let fadt = platform.tables.find_table::<Fadt>().unwrap();
     let sci_interrupt = fadt.sci_interrupt;
     log::info!("SCI Interrupt IRQ: {sci_interrupt:#X}");
+
+    let aml = aml::Interpreter::new_from_platform(&platform).unwrap();
+    aml.initialize_namespace();
+    // let output = aml
+    //     .evaluate(AmlName::from_str(r#"\_SB_"#).unwrap(), vec![])
+    //     .unwrap();
+    // log::info!("_SB: {output:#X?}");
+
+    let pci_routing_table =
+        PciRoutingTable::from_prt_path(AmlName::from_str(r#"\_SB.PCI0._PRT"#).unwrap(), &aml)
+            .unwrap();
+    log::debug!("PCI Routing Table: {pci_routing_table:#X?}");
+
     unsafe { acpi_events::init(platform) };
+
+    let mut ehci = None;
+    for (segment, data) in PCIE_MAPPINGS.lock().iter() {
+        let mapped_mem = NonNull::slice_from_raw_parts(
+            NonNull::new(data.virt as *mut _).unwrap(),
+            SEGMENT_MAPPED_LEN.try_into().unwrap(),
+        );
+        let mut pci = unsafe { PciAccess::new_pcie(data.info, mapped_mem) };
+        for bus in pci.known_buses() {
+            let mut bus = pci.bus(bus);
+            for device_number in u5::ZERO.value()..=u5::MAX.value() {
+                let Some(mut device) = bus.device(u5::new(device_number)) else {
+                    continue;
+                };
+                let possible_functions = device.possible_functions();
+                for function_number in
+                    possible_functions.start().value()..=possible_functions.end().value()
+                {
+                    let Some(mut function) = device.function(u3::new(function_number)) else {
+                        continue;
+                    };
+                    if function.class_code() == PCI_CLASS
+                        && function.sub_class() == PCI_SUBCLASS
+                        && function.prog_if() == PCI_PROG_IF
+                    {
+                        log::info!("Found eHCI PCI device");
+                        let interrupt_info = function.interrupt_info().unwrap();
+                        log::info!("interrupt info: {interrupt_info:#X?}");
+                        let bar = function.read_bar_with_size(0).unwrap().unwrap();
+                        log::info!("bar: {bar:#X?}");
+
+                        let command = function
+                            .command()
+                            .with_bus_master(true)
+                            .with_interrupt_disable(false);
+                        function.set_command(command);
+
+                        ehci = Some((device_number, function_number, interrupt_info, bar));
+                    }
+                }
+            }
+        }
+    }
+    let (device_number, function_number, interrupt_info, bar) = ehci.unwrap();
+    let irq_descriptor = pci_routing_table
+        .route(
+            device_number.into(),
+            function_number.value().into(),
+            match interrupt_info.interrupt_pin {
+                0x1 => Pin::IntA,
+                0x2 => Pin::IntB,
+                0x3 => Pin::IntC,
+                0x4 => Pin::IntD,
+                interrupt_pin => panic!("unknown interrupt pin: {interrupt_pin}"),
+            },
+            &aml,
+        )
+        .unwrap();
+    log::info!("eHCI irq descriptor: {irq_descriptor:#X?}");
+    let BarWithSize::Memory(bar) = bar else {
+        panic!()
+    };
+
+    let MemoryBarAddrAndSizeU64 { addr, size } = bar.addr_and_size.addr_and_size_u64();
+    let bar_ptr = NonNull::new(
+        map_phys(
+            addr,
+            size,
+            LeafMappingFlags {
+                writable: true,
+                executable: false,
+                user_mode_accessible: false,
+                pat_index: if bar.prefetchable {
+                    WRITE_THROUGH_INDEX
+                } else {
+                    STRONG_UNCACHEABLE_INDEX
+                },
+            },
+        )
+        .unwrap() as *mut u8,
+    )
+    .unwrap();
+    let periodic_frame_list_phys_addr = alloc_phys(0x1000, 0x1000).unwrap();
+    let periodic_frame_list_virt_addr = NonNull::new(
+        map_phys(
+            periodic_frame_list_phys_addr,
+            0x1000,
+            LeafMappingFlags {
+                writable: true,
+                user_mode_accessible: false,
+                executable: false,
+                pat_index: STRONG_UNCACHEABLE_INDEX,
+            },
+        )
+        .unwrap() as *mut _,
+    )
+    .unwrap();
+    let mut ehci = unsafe {
+        ez_ehci::Driver::new(
+            bar_ptr,
+            periodic_frame_list_phys_addr,
+            periodic_frame_list_virt_addr,
+        )
+    };
+    ehci.run();
 
     logger().flush();
     x86_64::instructions::interrupts::enable();
