@@ -9,7 +9,7 @@ test = false
 bench = false
 
 [dependencies]
-acpi = { git = "https://github.com/ChocolateLoverRaj/acpi", branch = "pm1_events_breaking", default-features = false, features = ["aml"] }
+acpi = { git = "https://github.com/ChocolateLoverRaj/acpi", branch = "fearless_os", default-features = false, features = ["aml"] }
 arbitrary-int = "2.2.0"
 bitmap-allocator = "0.4.6"
 common = { version = "0.1.0", path = "../common" }

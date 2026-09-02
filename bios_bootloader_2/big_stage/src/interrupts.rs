@@ -93,6 +93,12 @@ extern "x86-interrupt" fn sci_interrupt_handler(_stack_frame: InterruptStackFram
     unsafe { end_of_interrupt() };
 }
 
+extern "x86-interrupt" fn ehci_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    log::info!("eHCI interrupt!");
+    logger().flush();
+    unsafe { end_of_interrupt() };
+}
+
 pub fn init() {
     let tss = TSS.call_once(TaskStateSegment::new);
     let gdt = GDT.call_once(|| {
@@ -118,6 +124,7 @@ pub fn init() {
         idt.breakpoint.set_handler_fn(breakpoint_handler);
         idt[34].set_handler_fn(timer_interrupt_handler);
         idt[35].set_handler_fn(sci_interrupt_handler);
+        idt[36].set_handler_fn(ehci_interrupt_handler);
         idt
     });
     idt.load();

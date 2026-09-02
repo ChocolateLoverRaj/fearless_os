@@ -19,13 +19,14 @@ dependencies = [
 [[package]]
 name = "acpi"
 version = "6.1.1"
-source = "git+https://github.com/ChocolateLoverRaj/acpi?branch=pm1_events_breaking#a54e8f68a6f5d19055253d2e0db85ecbbd71ad86"
+source = "git+https://github.com/ChocolateLoverRaj/acpi?branch=fearless_os#9921c32bd682ad9d9267efa556dbacd03cfe1921"
 dependencies = [
  "bit_field",
  "bitflags 2.13.1",
  "byteorder",
  "log",
  "pci_types",
+ "smallvec",
  "spinning_top",
 ]
 
@@ -57,7 +58,7 @@ checksum = "7b7e4c2464d97fe331d41de9d5db0def0a96f4d823b8b32a2efd503578988973"
 name = "big_stage"
 version = "0.1.0"
 dependencies = [
- "acpi 6.1.1 (git+https://github.com/ChocolateLoverRaj/acpi?branch=pm1_events_breaking)",
+ "acpi 6.1.1 (git+https://github.com/ChocolateLoverRaj/acpi?branch=fearless_os)",
  "arbitrary-int",
  "bitmap-allocator",
  "common",

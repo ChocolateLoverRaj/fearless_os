@@ -58,9 +58,11 @@ use common::{
     paging::LeafMappingFlags,
     pat::{STRONG_UNCACHEABLE_INDEX, WRITE_THROUGH_INDEX},
 };
-use ez_ehci::{MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS};
+use ez_ehci::{
+    AnyEhci, MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS, RunOutput, TryTakeOutput, new_ehci,
+};
 use ez_hpet::{HPET_MMIO_SIZE, Hpet};
-use ez_pci::{BarWithSize, MemoryBarAddrAndSizeU64, PciAccess};
+use ez_pci::{BarWithSize, MemoryBarAddrAndSizeU64, PciAccess, PciFunction};
 use log::logger;
 use spin::Once;
 use uart_16550::Uart16550Tty;
@@ -195,7 +197,7 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
 
     unsafe { acpi_events::init(platform) };
 
-    let mut ehci = None;
+    let mut ehci_and_info = None;
     for (segment, data) in PCIE_MAPPINGS.lock().iter() {
         let mapped_mem = NonNull::slice_from_raw_parts(
             NonNull::new(data.virt as *mut _).unwrap(),
@@ -231,13 +233,69 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
                             .with_interrupt_disable(false);
                         function.set_command(command);
 
-                        ehci = Some((device_number, function_number, interrupt_info, bar));
+                        let BarWithSize::Memory(bar) = bar else {
+                            panic!()
+                        };
+                        let MemoryBarAddrAndSizeU64 { addr, size } =
+                            bar.addr_and_size.addr_and_size_u64();
+                        let mapped_bar = NonNull::slice_from_raw_parts(
+                            NonNull::new(
+                                map_phys(
+                                    addr,
+                                    size,
+                                    LeafMappingFlags {
+                                        writable: true,
+                                        executable: false,
+                                        user_mode_accessible: false,
+                                        pat_index: if bar.prefetchable {
+                                            WRITE_THROUGH_INDEX
+                                        } else {
+                                            STRONG_UNCACHEABLE_INDEX
+                                        },
+                                    },
+                                )
+                                .unwrap() as *mut u8,
+                            )
+                            .unwrap(),
+                            size.try_into().unwrap(),
+                        );
+                        struct MyPciAccess<'a> {
+                            function: PciFunction<'a>,
+                        }
+                        impl<'a> ez_ehci::PciAccess for MyPciAccess<'a> {
+                            fn read_u32(&mut self, offset: u8) -> u32 {
+                                self.function.read(offset.into())
+                            }
+                            fn write_u8(&mut self, offset: u8, value: u8) {
+                                self.function.write(offset.into(), value);
+                            }
+                        }
+                        let pci_access = MyPciAccess { function };
+                        let ehci = match unsafe { new_ehci(mapped_bar, pci_access) } {
+                            AnyEhci::OsOwned(ehci) => ehci,
+                            AnyEhci::BiosOwned(ehci) => {
+                                log::info!("eHCI owned by BIOS");
+                                let mut ehci = ehci.take_ownership();
+                                let ehci = loop {
+                                    match ehci.try_take() {
+                                        TryTakeOutput::Taken(ehci) => break ehci,
+                                        TryTakeOutput::NotYet(new_ehci) => {
+                                            ehci = new_ehci;
+                                        }
+                                    }
+                                };
+                                log::info!("took ownership of eHCI");
+                                ehci
+                            }
+                        };
+                        ehci_and_info =
+                            Some((device_number, function_number, interrupt_info, ehci));
                     }
                 }
             }
         }
     }
-    let (device_number, function_number, interrupt_info, bar) = ehci.unwrap();
+    let (device_number, function_number, interrupt_info, ehci) = ehci_and_info.unwrap();
     let irq_descriptor = pci_routing_table
         .route(
             device_number.into(),
@@ -253,57 +311,27 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
         )
         .unwrap();
     log::info!("eHCI irq descriptor: {irq_descriptor:#X?}");
-    let BarWithSize::Memory(bar) = bar else {
-        panic!()
-    };
+    apic::configure_ehci_interrupt(irq_descriptor);
 
-    let MemoryBarAddrAndSizeU64 { addr, size } = bar.addr_and_size.addr_and_size_u64();
-    let bar_ptr = NonNull::new(
-        map_phys(
-            addr,
-            size,
-            LeafMappingFlags {
-                writable: true,
-                executable: false,
-                user_mode_accessible: false,
-                pat_index: if bar.prefetchable {
-                    WRITE_THROUGH_INDEX
-                } else {
-                    STRONG_UNCACHEABLE_INDEX
-                },
-            },
-        )
-        .unwrap() as *mut u8,
-    )
-    .unwrap();
-    let periodic_frame_list_phys_addr = alloc_phys(0x1000, 0x1000).unwrap();
-    let periodic_frame_list_virt_addr = NonNull::new(
-        map_phys(
-            periodic_frame_list_phys_addr,
-            0x1000,
-            LeafMappingFlags {
-                writable: true,
-                user_mode_accessible: false,
-                executable: false,
-                pat_index: STRONG_UNCACHEABLE_INDEX,
-            },
-        )
-        .unwrap() as *mut _,
-    )
-    .unwrap();
-    let mut ehci = unsafe {
-        ez_ehci::Driver::new(
-            bar_ptr,
-            periodic_frame_list_phys_addr,
-            periodic_frame_list_virt_addr,
-        )
-    };
-    ehci.run();
-
+    let mut ehci = ehci.init();
+    log::info!("eHCI initialized");
     logger().flush();
     x86_64::instructions::interrupts::enable();
     loop {
-        hlt();
+        log::info!("running eHCI");
+        let output = ehci.run();
+        match output {
+            RunOutput::Idle => {
+                log::info!("idling (halting with interrupt enabled).");
+                loop {
+                    hlt();
+                }
+            }
+            RunOutput::NewDevice(device) => {
+                log::info!("New device: {device:?}");
+                todo!()
+            }
+        }
     }
 }
 
