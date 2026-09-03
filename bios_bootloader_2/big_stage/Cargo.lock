@@ -232,6 +232,7 @@ dependencies = [
  "bitbybit",
  "debug-ignore",
  "log",
+ "num_enum",
  "volatile 0.6.1",
 ]
 

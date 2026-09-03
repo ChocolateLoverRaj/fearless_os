@@ -59,7 +59,8 @@ use common::{
     pat::{STRONG_UNCACHEABLE_INDEX, WRITE_THROUGH_INDEX},
 };
 use ez_ehci::{
-    AnyEhci, MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS, RunOutput, TryTakeOutput, new_ehci,
+    AnyEhci, InitDeviceBuffer, MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS, PeriodicFrameList,
+    RunOutput, TryTakeOutput, new_ehci,
 };
 use ez_hpet::{HPET_MMIO_SIZE, Hpet};
 use ez_pci::{BarWithSize, MemoryBarAddrAndSizeU64, PciAccess, PciFunction};
@@ -71,6 +72,7 @@ use x86_64::instructions::{hlt, interrupts::int3};
 use crate::{
     acpi_handler::{AcpiHandler, PCIE_MAPPINGS, SEGMENT_MAPPED_LEN},
     bios_data_area::BiosDataArea,
+    config::CONFIG,
     memory::{alloc_phys, map_phys},
 };
 
@@ -176,8 +178,10 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
 
     unsafe { apic::init(&platform) };
 
-    platform.enter_acpi_mode().unwrap();
-    log::info!("Entered ACPI mode");
+    if CONFIG.enter_acpi_mode {
+        platform.enter_acpi_mode().unwrap();
+        log::info!("Entered ACPI mode");
+    }
 
     let fadt = platform.tables.find_table::<Fadt>().unwrap();
     let sci_interrupt = fadt.sci_interrupt;
@@ -313,25 +317,69 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     log::info!("eHCI irq descriptor: {irq_descriptor:#X?}");
     apic::configure_ehci_interrupt(irq_descriptor);
 
-    let mut ehci = ehci.init();
+    let ehci_flags = LeafMappingFlags {
+        writable: true,
+        executable: false,
+        user_mode_accessible: false,
+        pat_index: STRONG_UNCACHEABLE_INDEX,
+    };
+    let mem = alloc_phys(
+        size_of::<PeriodicFrameList>().try_into().unwrap(),
+        align_of::<PeriodicFrameList>().try_into().unwrap(),
+    )
+    .unwrap();
+    let ptr = NonNull::new(
+        map_phys(
+            mem,
+            size_of::<PeriodicFrameList>().try_into().unwrap(),
+            ehci_flags,
+        )
+        .unwrap() as *mut _,
+    )
+    .unwrap();
+    let mut ehci = ehci.init(MappedMem {
+        phys_addr: mem.try_into().unwrap(),
+        ptr: ptr,
+    });
     log::info!("eHCI initialized");
     logger().flush();
-    x86_64::instructions::interrupts::enable();
+    // x86_64::instructions::interrupts::enable();
     loop {
         log::info!("running eHCI");
-        let output = ehci.run();
-        match output {
-            RunOutput::Idle => {
-                log::info!("idling (halting with interrupt enabled).");
-                loop {
-                    hlt();
+        let device = loop {
+            match ehci.run() {
+                RunOutput::Idle => {
+                    log::info!("idling (halting with interrupt enabled).");
+                    loop {
+                        hlt();
+                    }
                 }
-            }
-            RunOutput::NewDevice(device) => {
-                log::info!("New device: {device:?}");
-                todo!()
-            }
-        }
+                RunOutput::NewDevice(device) => break device,
+            };
+        };
+        log::info!("New device: {device:?}");
+        let mem = alloc_phys(
+            size_of::<InitDeviceBuffer>().try_into().unwrap(),
+            align_of::<InitDeviceBuffer>().try_into().unwrap(),
+        )
+        .unwrap();
+        let ptr = NonNull::new(
+            map_phys(
+                mem,
+                size_of::<InitDeviceBuffer>().try_into().unwrap(),
+                ehci_flags,
+            )
+            .unwrap() as *mut _,
+        )
+        .unwrap();
+        ehci.init_device(
+            device.port,
+            MappedMem {
+                phys_addr: mem.try_into().unwrap(),
+                ptr,
+            },
+        )
+        .unwrap();
     }
 }
 

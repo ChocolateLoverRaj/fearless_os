@@ -24,6 +24,7 @@ pub struct Config {
     pub font: MonoFont<'static>,
     /// Writing to the framebuffer can be slow, so manually flushing can save time.
     pub screen_flush: ScreenFlush,
+    pub enter_acpi_mode: bool,
 }
 
 pub const CONFIG: Config = Config {
@@ -37,4 +38,5 @@ pub const CONFIG: Config = Config {
     prefer_screen_logging: false,
     font: mono_font::iso_8859_16::FONT_6X13,
     screen_flush: ScreenFlush::EveryLog,
+    enter_acpi_mode: false,
 };
