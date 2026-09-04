@@ -21,7 +21,7 @@ use x86_64::{
 };
 
 use crate::{
-    acpi_events::{self, platform},
+    acpi_events::{self, ACPI_GLOBALS, platform},
     apic::end_of_interrupt,
     logger,
 };
@@ -54,9 +54,8 @@ extern "x86-interrupt" fn sci_interrupt_handler(_stack_frame: InterruptStackFram
     log::info!("SCI interrupt! {events:?}.");
     if events.contains(Pm1EventFlags::POWER_BUTTON) {
         let platform = platform();
-        let aml = aml::Interpreter::new_from_platform(&platform).unwrap();
-        log::info!("Created AML interpreter");
-        let s5 = aml
+        let interpreter = &ACPI_GLOBALS.get().unwrap().aml_interpreter;
+        let s5 = interpreter
             .evaluate(AmlName::from_str(r#"\_S5_"#).unwrap(), vec![])
             .unwrap();
         let Object::Package(package) = &*s5 else {
@@ -69,7 +68,7 @@ extern "x86-interrupt" fn sci_interrupt_handler(_stack_frame: InterruptStackFram
             panic!()
         };
         log::info!("S5: slp_type_a={slp_type_a} slp_type_b={slp_type_b}.");
-        match aml.evaluate(
+        match interpreter.evaluate(
             AmlName::from_str(r#"\_PTS"#).unwrap(),
             vec![WrappedObject::new(Object::Integer(5))],
         ) {

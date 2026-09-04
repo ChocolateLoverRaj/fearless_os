@@ -54,6 +54,7 @@ run: $(BUILD_DIR)/disk.img
         -device usb-ehci,id=ehci \
         -device usb-mouse,bus=ehci.0 \
         -trace "usb_ehci_*" \
+        -d trace:pci_cfg_write \
         --nographic
 
 run_with_graphic: $(BUILD_DIR)/disk.img
