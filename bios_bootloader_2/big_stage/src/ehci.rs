@@ -1,10 +1,6 @@
 use core::{ptr::NonNull, str::FromStr};
 
-use acpi::aml::{
-    self,
-    namespace::AmlName,
-    pci_routing::{PciRoutingTable, Pin},
-};
+use acpi::aml::{self, namespace::AmlName, pci_routing::PciRoutingTable};
 use arbitrary_int::{traits::Integer, u3, u5};
 use common::{paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
 use ez_ehci::{
@@ -18,7 +14,6 @@ use x86_64::instructions::hlt;
 use crate::{
     acpi_events::ACPI_GLOBALS,
     acpi_handler::{PCIE_MAPPINGS, SEGMENT_MAPPED_LEN},
-    apic,
     memory::{alloc_phys, map_phys},
 };
 

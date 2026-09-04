@@ -37,6 +37,16 @@ static IDT: Once<InterruptDescriptorTable> = Once::new();
 static TSS: Once<TaskStateSegment> = Once::new();
 static GDT: Once<Gdt> = Once::new();
 
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum IrqAssignments {
+    LapicError = 0x20,
+    LapicSpurious,
+    LapicTimer,
+    Sci,
+    Ehci,
+}
+
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
     log::debug!("Breakpoint! Stack frame: {stack_frame:#?}");
     logger().flush();
@@ -121,9 +131,9 @@ pub fn init() {
     let idt = IDT.call_once(|| {
         let mut idt = InterruptDescriptorTable::new();
         idt.breakpoint.set_handler_fn(breakpoint_handler);
-        idt[34].set_handler_fn(timer_interrupt_handler);
-        idt[35].set_handler_fn(sci_interrupt_handler);
-        idt[36].set_handler_fn(ehci_interrupt_handler);
+        idt[IrqAssignments::LapicTimer as u8].set_handler_fn(timer_interrupt_handler);
+        idt[IrqAssignments::Sci as u8].set_handler_fn(sci_interrupt_handler);
+        idt[IrqAssignments::Ehci as u8].set_handler_fn(ehci_interrupt_handler);
         idt
     });
     idt.load();
