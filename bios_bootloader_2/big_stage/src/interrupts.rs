@@ -2,7 +2,7 @@ use core::str::FromStr;
 
 use acpi::{
     aml::{
-        self, AmlError,
+        AmlError,
         namespace::AmlName,
         object::{Object, WrappedObject},
     },
@@ -45,6 +45,7 @@ pub enum IrqAssignments {
     LapicTimer,
     Sci,
     Ehci,
+    Hpet,
 }
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
@@ -108,6 +109,12 @@ extern "x86-interrupt" fn ehci_interrupt_handler(_stack_frame: InterruptStackFra
     unsafe { end_of_interrupt() };
 }
 
+extern "x86-interrupt" fn hpet_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    log::info!("HPET interrupt!");
+    logger().flush();
+    unsafe { end_of_interrupt() };
+}
+
 pub fn init() {
     let tss = TSS.call_once(TaskStateSegment::new);
     let gdt = GDT.call_once(|| {
@@ -134,6 +141,8 @@ pub fn init() {
         idt[IrqAssignments::LapicTimer as u8].set_handler_fn(timer_interrupt_handler);
         idt[IrqAssignments::Sci as u8].set_handler_fn(sci_interrupt_handler);
         idt[IrqAssignments::Ehci as u8].set_handler_fn(ehci_interrupt_handler);
+        idt[IrqAssignments::Hpet as u8].set_handler_fn(hpet_interrupt_handler);
+
         idt
     });
     idt.load();

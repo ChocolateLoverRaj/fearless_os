@@ -11,7 +11,7 @@ use x2apic::{
     lapic::{LocalApic, LocalApicBuilder, cpu_has_x2apic},
 };
 
-use crate::memory::map_phys;
+use crate::{interrupts::IrqAssignments, memory::map_phys};
 
 static LOCAL_APIC: Once<Mutex<ForceSend<LocalApic>>> = Once::new();
 static IO_APICS: Once<Mutex<Box<[(u32, IoApic)]>>> = Once::new();
@@ -70,7 +70,7 @@ pub unsafe fn init(platform: &AcpiPlatform<impl acpi::Handler>) {
                     // entry.set_dest(0);
                     // entry.set_mode(IrqMode::Fixed);
                     // entry.set_flags(IrqFlags::);
-                    entry.set_vector(35);
+                    entry.set_vector(IrqAssignments::Sci as u8);
                     unsafe { io_apic.set_table_entry(0x9, entry) };
                     unsafe { io_apic.enable_irq(0x9) };
                     (io_apic_info.global_system_interrupt_base, io_apic)
@@ -86,14 +86,17 @@ pub unsafe fn end_of_interrupt() {
     unsafe { local_apic.end_of_interrupt() };
 }
 
-pub fn configure_ehci_interrupt(irq_descriptor: IrqDescriptor) {
-    // TODO: there might be multiple irqs
-    let gsi = irq_descriptor.irqs[0];
+fn configure_interrupt(
+    io_irq: u32,
+    lapic_irq: u8,
+    trigger: InterruptTrigger,
+    polarity: InterruptPolarity,
+) {
     let mut io_apics = IO_APICS.get().unwrap().lock();
     let (io_apic, entry_within) = io_apics
         .iter_mut()
-        .find_map(|(base_gsi, io_apic)| {
-            let entry_within = u8::try_from(gsi.checked_sub(*base_gsi)?).ok()?;
+        .find_map(|(base_io_irq, io_apic)| {
+            let entry_within = u8::try_from(io_irq.checked_sub(*base_io_irq)?).ok()?;
             if entry_within <= unsafe { io_apic.max_table_entry() } {
                 Some((io_apic, entry_within))
             } else {
@@ -101,18 +104,43 @@ pub fn configure_ehci_interrupt(irq_descriptor: IrqDescriptor) {
             }
         })
         .unwrap();
+    log::info!(
+        "routing I/O irq {io_irq:#X} to LAPIC irq {lapic_irq:#X} through I/O apic {:#X} entry {:#X}",
+        unsafe { io_apic.id() },
+        entry_within,
+    );
     let mut entry = RedirectionTableEntry::default();
-    entry.set_vector(36);
+    entry.set_vector(lapic_irq);
     entry.set_flags({
         let mut flags = IrqFlags::empty();
-        if irq_descriptor.trigger == InterruptTrigger::Level {
+        if trigger == InterruptTrigger::Level {
             flags.insert(IrqFlags::LEVEL_TRIGGERED);
         }
-        if irq_descriptor.polarity == InterruptPolarity::ActiveLow {
+        if polarity == InterruptPolarity::ActiveLow {
             flags.insert(IrqFlags::LOW_ACTIVE);
         }
         flags
     });
     unsafe { io_apic.set_table_entry(entry_within, entry) };
     unsafe { io_apic.enable_irq(entry_within) };
+}
+
+pub fn configure_ehci_interrupt(irq_descriptor: IrqDescriptor) {
+    // TODO: there might be multiple irqs
+    let gsi = irq_descriptor.irqs[0];
+    configure_interrupt(
+        gsi,
+        IrqAssignments::Ehci as u8,
+        irq_descriptor.trigger,
+        irq_descriptor.polarity,
+    );
+}
+
+pub fn configure_hpet_interrupt(irq: u8) {
+    configure_interrupt(
+        irq.into(),
+        IrqAssignments::Hpet as u8,
+        InterruptTrigger::Level,
+        InterruptPolarity::ActiveHigh,
+    );
 }

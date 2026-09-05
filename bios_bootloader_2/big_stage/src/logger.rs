@@ -4,6 +4,7 @@ use common::bios::BiosFns;
 use log::{LevelFilter, Log, set_logger, set_max_level};
 use spin::{Mutex, Once};
 use uart_16550::{Uart16550Tty, backend::PioBackend};
+use x86_64::instructions::interrupts::without_interrupts;
 
 use crate::{
     config::{CONFIG, ScreenFlush},
@@ -47,25 +48,29 @@ struct Logger {
 
 impl Log for Logger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
-        metadata.level() <= self.data.lock().level_filter()
+        without_interrupts(|| metadata.level() <= self.data.lock().level_filter())
     }
 
     fn log(&self, record: &log::Record) {
-        let msg = record.args();
-        let mut data = self.data.lock();
-        let level = record.level();
-        if level <= data.level_filter() {
-            let target = data.target_mut();
-            target.write_with_color(level.into(), &format_args!("{level:5} "));
-            target.write_with_color(Color::Default, &format_args!("{msg}\n"));
-            if matches!(CONFIG.screen_flush, ScreenFlush::EveryLog) {
-                target.flush();
+        without_interrupts(|| {
+            let msg = record.args();
+            let mut data = self.data.lock();
+            let level = record.level();
+            if level <= data.level_filter() {
+                let target = data.target_mut();
+                target.write_with_color(level.into(), &format_args!("{level:5} "));
+                target.write_with_color(Color::Default, &format_args!("{msg}\n"));
+                if matches!(CONFIG.screen_flush, ScreenFlush::EveryLog) {
+                    target.flush();
+                }
             }
-        }
+        })
     }
 
     fn flush(&self) {
-        self.data.lock().target_mut().flush();
+        without_interrupts(|| {
+            self.data.lock().target_mut().flush();
+        })
     }
 }
 
@@ -81,7 +86,9 @@ pub fn init(bios_fns: BiosFns) {
 }
 
 pub fn init_uart(uart: Uart16550Tty<PioBackend>) {
-    LOGGER.get().unwrap().data.lock().logger = LoggerKind::Uart(UartLogTarget::new(uart));
+    without_interrupts(|| {
+        LOGGER.get().unwrap().data.lock().logger = LoggerKind::Uart(UartLogTarget::new(uart));
+    });
 }
 
 /// Logs to the frame buffer instead of VBE text mode logging.
@@ -90,11 +97,13 @@ pub fn init_frame_buffer(
     frame_buffer: FrameBufferEmbeddedGraphics<'static>,
     replace_uart: bool,
 ) -> Option<FrameBufferEmbeddedGraphics<'static>> {
-    let mut data = LOGGER.get().unwrap().data.lock();
-    if !matches!(data.logger, LoggerKind::Uart(_)) || replace_uart {
-        data.logger = LoggerKind::FrameBuffer(FrameBufferLogTarget::new(frame_buffer));
-        None
-    } else {
-        Some(frame_buffer)
-    }
+    without_interrupts(|| {
+        let mut data = LOGGER.get().unwrap().data.lock();
+        if !matches!(data.logger, LoggerKind::Uart(_)) || replace_uart {
+            data.logger = LoggerKind::FrameBuffer(FrameBufferLogTarget::new(frame_buffer));
+            None
+        } else {
+            Some(frame_buffer)
+        }
+    })
 }

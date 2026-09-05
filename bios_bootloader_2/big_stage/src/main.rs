@@ -6,6 +6,7 @@ extern crate alloc;
 mod acpi_events;
 mod acpi_handler;
 mod apic;
+mod async_executor;
 mod bios_data_area;
 mod config;
 mod ehci;
@@ -16,6 +17,7 @@ mod frame_buffer_log_target;
 mod frame_buffer_writer;
 mod free_iterator;
 mod global_allocator;
+mod hpet;
 mod initial_pmm;
 mod interrupts;
 mod linked_list;
@@ -63,7 +65,6 @@ use ez_ehci::{
     AnyEhci, InitDeviceBuffer, MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS, PeriodicFrameList,
     RunOutput, TryTakeOutput, new_ehci,
 };
-use ez_hpet::{HPET_MMIO_SIZE, Hpet};
 use ez_pci::{BarWithSize, MemoryBarAddrAndSizeU64, PciAccess, PciFunction};
 use log::logger;
 use spin::Once;
@@ -187,6 +188,8 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     let fadt = platform.tables.find_table::<Fadt>().unwrap();
     let sci_interrupt = fadt.sci_interrupt;
     log::info!("SCI Interrupt IRQ: {sci_interrupt:#X}");
+
+    hpet::init(&platform.tables);
 
     unsafe { acpi_events::init(platform) };
 

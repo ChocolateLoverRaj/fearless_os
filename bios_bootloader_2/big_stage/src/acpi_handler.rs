@@ -1,15 +1,14 @@
-use core::{hint::spin_loop, num::NonZero, ptr::NonNull};
+use core::{hint::spin_loop, ptr::NonNull};
 
-use acpi::{AcpiTables, Handler, HpetInfo, PciAddress, sdt::mcfg::Mcfg};
+use acpi::{AcpiTables, Handler, PciAddress, sdt::mcfg::Mcfg};
 use alloc::collections::btree_map::BTreeMap;
 use arbitrary_int::{u3, u5, u12};
 use common::{OFFSET_MAP_VIRT_ADDR, paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
-use ez_hpet::{HPET_MMIO_SIZE, Hpet};
 use ez_pci::{PciAccess, PciReadWriteValue, PcieInfo};
-use spin::{Mutex, Once};
+use spin::Mutex;
 use x86_64::instructions::port::Port;
 
-use crate::memory::map_phys;
+use crate::{hpet::HPET, memory::map_phys};
 
 pub struct PcieData {
     pub info: PcieInfo,
@@ -17,7 +16,6 @@ pub struct PcieData {
 }
 
 pub static PCIE_MAPPINGS: Mutex<BTreeMap<u16, PcieData>> = Mutex::new(BTreeMap::new());
-pub static HPET: Once<Hpet<'static>> = Once::new();
 
 const ACPI_MAPPING_FLAGS: LeafMappingFlags = LeafMappingFlags {
     executable: false,
@@ -257,21 +255,4 @@ pub fn init(tables: &AcpiTables<AcpiHandler>) {
             },
         );
     }
-
-    let hpet_info = HpetInfo::new(tables).unwrap();
-    log::info!("HPET Info: {hpet_info:#X?}");
-    let hpet_addr = map_phys(
-        hpet_info.base_address.try_into().unwrap(),
-        HPET_MMIO_SIZE.try_into().unwrap(),
-        LeafMappingFlags {
-            writable: true,
-            user_mode_accessible: false,
-            executable: false,
-            pat_index: STRONG_UNCACHEABLE_INDEX,
-        },
-    )
-    .unwrap();
-    let mut hpet = unsafe { Hpet::new(NonZero::new(hpet_addr.try_into().unwrap()).unwrap()) };
-    hpet.set_enable(true);
-    HPET.call_once(|| hpet);
 }

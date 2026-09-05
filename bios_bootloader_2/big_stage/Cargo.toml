@@ -15,7 +15,7 @@ bitmap-allocator = "0.4.6"
 common = { version = "0.1.0", path = "../common" }
 embedded-graphics = "0.8.2"
 ez_ehci = { version = "0.1.0", path = "../../../ez_ehci" }
-ez_hpet = "1.0.0"
+ez_hpet = { path = "../../../ez_hpet" }
 ez_pci = { version = "2.0.0", path = "../../../ez_pci", features = ["acpi"] }
 force-send-sync = "2.0.0"
 heapless = "0.9.3"
