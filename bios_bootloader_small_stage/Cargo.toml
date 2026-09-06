@@ -1,0 +1,23 @@
+[package]
+name = "bios_bootloader_small_stage"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "bios_bootloader_small_stage"
+test = false
+bench = false
+
+[dependencies]
+arbitrary-int = { workspace = true }
+bitbybit = { workspace = true }
+bios_bootloader_common = { workspace = true }
+log = { workspace = true }
+spin = { workspace = true, features = ["once", "spin_mutex", "mutex"] }
+unicode-segmentation = { workspace = true }
+x86_64 = { workspace = true, features = ["instructions"] }
+zerocopy = { workspace = true, features = ["derive"] }
+
+[build-dependencies]
+bios_bootloader_common = { workspace = true }
+elf = { workspace = true, features = ["std"] }

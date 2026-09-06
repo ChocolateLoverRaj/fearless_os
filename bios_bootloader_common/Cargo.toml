@@ -1,0 +1,15 @@
+[package]
+name = "bios_bootloader_common"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+arbitrary-int = { workspace = true }
+bitbybit = { workspace = true }
+heapless = { workspace = true }
+log = { workspace = true }
+raw-cpuid = { workspace = true }
+spin = { workspace = true, features = ["mutex", "once", "spin_mutex"] }
+unicode-segmentation = { workspace = true }
+x86_64 = { workspace = true }
+zerocopy = { workspace = true, features = ["derive"] }

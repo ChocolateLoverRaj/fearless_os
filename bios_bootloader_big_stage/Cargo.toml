@@ -1,0 +1,36 @@
+[package]
+name = "bios_bootloader_big_stage"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "bios_bootloader_big_stage"
+test = false
+bench = false
+
+[dependencies]
+acpi = { workspace = true, features = ["aml"] }
+arbitrary-int = { workspace = true }
+bios_bootloader_common = { workspace = true }
+embedded-graphics = { workspace = true }
+ez_ehci = { workspace = true }
+ez_hpet = { workspace = true }
+ez_pci = { workspace = true }
+force-send-sync = { workspace = true }
+futures = { workspace = true }
+heapless = { workspace = true }
+log = { workspace = true }
+nodit = { workspace = true }
+owo-colors = { workspace = true }
+pic8259 = { workspace = true }
+spin = { workspace = true }
+spinning_top = { workspace = true }
+talc = { workspace = true }
+uart_16550 = { workspace = true }
+unicode-segmentation = { workspace = true }
+x2apic = { workspace = true }
+x86_64 = { workspace = true, features = ["abi_x86_interrupt", "instructions"] }
+zerocopy = { workspace = true }
+
+[build-dependencies]
+bios_bootloader_common = { workspace = true }
