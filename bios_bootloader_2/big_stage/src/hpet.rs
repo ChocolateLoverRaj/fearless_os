@@ -12,7 +12,7 @@ use alloc::{collections::binary_heap::BinaryHeap, sync::Arc};
 use arbitrary_int::u5;
 use common::{paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
 use ez_hpet::{
-    ApicDestMode, DeliveryMode, Hpet, HpetMemory, HpetTimerRef, InterruptConfig, InterruptTrigger,
+    ApicDestMode, DeliveryMode, Hpet, HpetMemory, InterruptConfig, InterruptTrigger,
     LEGACY_REPLACEMENT_ROUTES, RedirectionHint, TimerMode,
 };
 use futures::task::AtomicWaker;
@@ -82,18 +82,11 @@ pub fn init(acpi_tables: &AcpiTables<AcpiHandler>) {
     let enable_legacy_replacement =
         hpet.legacy_replacement_capable() && CONFIG.hpet_prefer_legacy_replacement;
     hpet.set_legacy_replacement_enabled(enable_legacy_replacement);
-    let ticks_per_us = 1_000_000_000 / hpet.main_counter_tick_period();
-    let microseconds_to_sleep = 1_000_000;
-    let ticks_to_sleep = microseconds_to_sleep * u64::from(ticks_per_us);
-    let counter = hpet.main_counter_value();
-    let compare_value = counter + ticks_to_sleep;
-    log::info!("timer value: {counter:#X}. compare value: {compare_value:#X}");
     // Only support 1 timer for now
-    let mut timer = hpet.timer_mut(0);
+    let mut timer = hpet.timer(0);
+    log::info!("HPET timer 0: {timer:#?}");
     let supported_io_apic_interrupts = timer.supported_io_apic_interrupts();
     let supports_fsb_interrupts = timer.supports_fsb_interrupts();
-    log::info!("HPET timer 0 supports IO-APIC interrupts: {supported_io_apic_interrupts:#b}");
-    log::info!("HPET timer 0 supports FSB interrupts: {supports_fsb_interrupts:?}");
     if supports_fsb_interrupts {
         timer.configure_interrupt(InterruptConfig::Fsb {
             destination_mode: ApicDestMode::Physical,
