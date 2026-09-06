@@ -4,13 +4,15 @@ use acpi::{AcpiTables, HpetInfo};
 use arbitrary_int::u5;
 use common::{paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
 use ez_hpet::{
-    Hpet, HpetMemory, HpetTimerRef, InterruptConfig, InterruptTrigger, LEGACY_REPLACEMENT_ROUTES,
-    TimerMode,
+    ApicDestMode, DeliveryMode, Hpet, HpetMemory, HpetTimerRef, InterruptConfig, InterruptTrigger,
+    LEGACY_REPLACEMENT_ROUTES, RedirectionHint, TimerMode,
 };
 use spin::Once;
 use x86_64::instructions::{hlt, interrupts};
 
-use crate::{acpi_handler::AcpiHandler, apic, config::CONFIG, memory::map_phys};
+use crate::{
+    acpi_handler::AcpiHandler, apic, config::CONFIG, interrupts::IrqAssignments, memory::map_phys,
+};
 
 pub static HPET: Once<Hpet<'static>> = Once::new();
 
@@ -50,7 +52,16 @@ pub fn init(acpi_tables: &AcpiTables<AcpiHandler>) {
     let supports_fsb_interrupts = timer.supports_fsb_interrupts();
     log::info!("HPET timer 0 supports IO-APIC interrupts: {supported_io_apic_interrupts:#b}");
     log::info!("HPET timer 0 supports FSB interrupts: {supports_fsb_interrupts:?}");
-    if enable_legacy_replacement {
+    if supports_fsb_interrupts {
+        timer.configure_interrupt(InterruptConfig::Fsb {
+            destination_mode: ApicDestMode::Physical,
+            redirection_hint: RedirectionHint::DestId,
+            destination_id: 0,
+            interrupt_vector: IrqAssignments::Hpet as u8,
+            delivery_mode: DeliveryMode::Fixed,
+        });
+        log::info!("HPET timer 0 configured to use FSB interrupt")
+    } else if enable_legacy_replacement {
         timer.configure_interrupt(InterruptConfig::LegacyReplacment {
             trigger: InterruptTrigger::Edge,
         });

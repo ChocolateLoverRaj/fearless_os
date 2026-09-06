@@ -46,5 +46,5 @@ pub const CONFIG: Config = Config {
     font: mono_font::iso_8859_16::FONT_6X13,
     screen_flush: ScreenFlush::EveryLog,
     enter_acpi_mode: false,
-    hpet_prefer_legacy_replacement: false,
+    hpet_prefer_legacy_replacement: true,
 };
