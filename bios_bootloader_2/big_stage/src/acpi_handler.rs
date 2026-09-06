@@ -1,4 +1,4 @@
-use core::{hint::spin_loop, ptr::NonNull};
+use core::{hint::spin_loop, ptr::NonNull, time::Duration};
 
 use acpi::{AcpiTables, Handler, PciAddress, sdt::mcfg::Mcfg};
 use alloc::collections::btree_map::BTreeMap;
@@ -8,7 +8,11 @@ use ez_pci::{PciAccess, PciReadWriteValue, PcieInfo};
 use spin::Mutex;
 use x86_64::instructions::port::Port;
 
-use crate::{hpet::HPET, memory::map_phys};
+use crate::{
+    async_executor::execute_future,
+    hpet::{HPET, sleep},
+    memory::map_phys,
+};
 
 pub struct PcieData {
     pub info: PcieInfo,
@@ -201,8 +205,11 @@ impl Handler for AcpiHandler {
 
     fn stall(&self, microseconds: u64) {
         let hpet = HPET.get().unwrap();
-        let ticks_per_us = 1_000_000_000 / hpet.main_counter_tick_period();
-        let ticks_to_sleep = microseconds * u64::from(ticks_per_us);
+        let ticks_to_sleep = u64::try_from(
+            Duration::from_micros(microseconds).as_nanos() * 1_000_000
+                / u128::from(hpet.main_counter_tick_period()),
+        )
+        .unwrap();
         let sleep_start_counter_value = hpet.main_counter_value();
         while hpet
             .main_counter_value()
@@ -214,8 +221,7 @@ impl Handler for AcpiHandler {
     }
 
     fn sleep(&self, milliseconds: u64) {
-        // TODO: Don't busy loop
-        self.stall(milliseconds * 1000);
+        execute_future(sleep(Duration::from_millis(milliseconds)));
     }
 
     fn create_mutex(&self) -> acpi::Handle {

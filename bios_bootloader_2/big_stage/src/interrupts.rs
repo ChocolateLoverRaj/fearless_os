@@ -23,7 +23,7 @@ use x86_64::{
 use crate::{
     acpi_events::{self, ACPI_GLOBALS, platform},
     apic::end_of_interrupt,
-    logger,
+    hpet, logger,
 };
 
 pub struct Gdt {
@@ -110,7 +110,7 @@ extern "x86-interrupt" fn ehci_interrupt_handler(_stack_frame: InterruptStackFra
 }
 
 extern "x86-interrupt" fn hpet_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    log::info!("HPET interrupt!");
+    hpet::handle_irq();
     logger().flush();
     unsafe { end_of_interrupt() };
 }

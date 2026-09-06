@@ -40,6 +40,7 @@ use core::{
     ptr::NonNull,
     str::FromStr,
     sync::atomic::{AtomicU16, Ordering},
+    time::Duration,
 };
 
 use acpi::{
@@ -73,8 +74,10 @@ use x86_64::instructions::{hlt, interrupts::int3};
 
 use crate::{
     acpi_handler::{AcpiHandler, PCIE_MAPPINGS, SEGMENT_MAPPED_LEN},
+    async_executor::execute_future,
     bios_data_area::BiosDataArea,
     config::CONFIG,
+    hpet::sleep,
     memory::{alloc_phys, map_phys},
 };
 
@@ -190,6 +193,13 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     log::info!("SCI Interrupt IRQ: {sci_interrupt:#X}");
 
     hpet::init(&platform.tables);
+
+    // execute_future(async {
+    //     loop {
+    //         sleep(Duration::from_secs(1)).await;
+    //         log::info!("after sleep");
+    //     }
+    // });
 
     unsafe { acpi_events::init(platform) };
 
