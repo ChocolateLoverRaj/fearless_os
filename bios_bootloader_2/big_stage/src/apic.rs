@@ -140,7 +140,7 @@ pub fn configure_hpet_interrupt(irq: u8) {
     configure_interrupt(
         irq.into(),
         IrqAssignments::Hpet as u8,
-        InterruptTrigger::Level,
+        InterruptTrigger::Edge,
         InterruptPolarity::ActiveHigh,
     );
 }

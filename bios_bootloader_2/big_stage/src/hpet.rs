@@ -3,11 +3,14 @@ use core::ptr::NonNull;
 use acpi::{AcpiTables, HpetInfo};
 use arbitrary_int::u5;
 use common::{paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
-use ez_hpet::{Hpet, HpetMemory, HpetTimerRef, InterruptConfig, InterruptTrigger, TimerMode};
+use ez_hpet::{
+    Hpet, HpetMemory, HpetTimerRef, InterruptConfig, InterruptTrigger, LEGACY_REPLACEMENT_ROUTES,
+    TimerMode,
+};
 use spin::Once;
 use x86_64::instructions::{hlt, interrupts};
 
-use crate::{acpi_handler::AcpiHandler, apic, memory::map_phys};
+use crate::{acpi_handler::AcpiHandler, apic, config::CONFIG, memory::map_phys};
 
 pub static HPET: Once<Hpet<'static>> = Once::new();
 
@@ -32,7 +35,9 @@ pub fn init(acpi_tables: &AcpiTables<AcpiHandler>) {
     hpet.set_enable(true);
 
     // We're going to be very simple and select the first
-    hpet.set_legacy_replacement_enabled(false);
+    let enable_legacy_replacement =
+        hpet.legacy_replacement_capable() && CONFIG.hpet_prefer_legacy_replacement;
+    hpet.set_legacy_replacement_enabled(enable_legacy_replacement);
     let ticks_per_us = 1_000_000_000 / hpet.main_counter_tick_period();
     let microseconds_to_sleep = 1_000_000;
     let ticks_to_sleep = microseconds_to_sleep * u64::from(ticks_per_us);
@@ -45,22 +50,27 @@ pub fn init(acpi_tables: &AcpiTables<AcpiHandler>) {
     let supports_fsb_interrupts = timer.supports_fsb_interrupts();
     log::info!("HPET timer 0 supports IO-APIC interrupts: {supported_io_apic_interrupts:#b}");
     log::info!("HPET timer 0 supports FSB interrupts: {supports_fsb_interrupts:?}");
-    // Avoid interrupts 0..=15 because they can have legacy sources
-    let io_apic_interrupt_to_use =
-        u5::new(u8::try_from((supported_io_apic_interrupts & !0xF).trailing_zeros()).unwrap());
-    // let io_apic_interrupt_to_use = u5::new(2);
-    timer.configure_interrupt(InterruptConfig::IoApic(io_apic_interrupt_to_use));
-    let configuration = timer.interrupt_cfg();
-    log::info!("interrupt configuration: {configuration:#?}");
-
+    if enable_legacy_replacement {
+        timer.configure_interrupt(InterruptConfig::LegacyReplacment {
+            trigger: InterruptTrigger::Edge,
+        });
+        apic::configure_hpet_interrupt(LEGACY_REPLACEMENT_ROUTES[0].apic_mapping);
+        log::info!("HPET timer 0 routed to legacy replacment");
+    } else {
+        // Avoid interrupts 0..=15 because they can have legacy sources
+        let io_apic_interrupt_to_use =
+            u5::new(u8::try_from((supported_io_apic_interrupts & !0xF).trailing_zeros()).unwrap());
+        timer.configure_interrupt(InterruptConfig::IoApic {
+            io_apic_irq: io_apic_interrupt_to_use,
+            trigger: InterruptTrigger::Edge,
+        });
+        apic::configure_hpet_interrupt(io_apic_interrupt_to_use.into());
+        log::info!("HPET timer 0 routed to I/O irq {io_apic_interrupt_to_use:#X}");
+    }
+    timer.set_mode(TimerMode::Oneshot);
     timer.set_comparator_value(compare_value);
     timer.set_interrupt_enable(true);
-    timer.set_trigger(InterruptTrigger::Level);
-    timer.set_mode(TimerMode::Oneshot);
 
-    apic::configure_hpet_interrupt(io_apic_interrupt_to_use.into());
-
-    log::info!("routed to interrupt {io_apic_interrupt_to_use}");
     // For testing
     interrupts::enable();
     loop {
