@@ -1,138 +1,80 @@
-use hex_slice::AsHex;
-use log::info;
-use sha2::{Digest, Sha256};
+extern crate alloc;
+use core::time::Duration;
+
 use uefi::{
     Identify,
-    boot::SearchType,
+    allocator::Allocator,
+    boot::{
+        OpenProtocolAttributes, OpenProtocolParams, SearchType, exit_boot_services,
+        get_handle_for_protocol, image_handle, locate_handle_buffer, open_protocol,
+        open_protocol_exclusive, stall,
+    },
+    mem::memory_map::MemoryMapOwned,
     prelude::*,
-    proto::tcg::{AlgorithmId, EventType, v2::Tcg},
+    proto::{
+        acpi::AcpiTable,
+        console::{gop::GraphicsOutput, serial::Serial},
+        device_path::{
+            acpi,
+            text::{AllowShortcuts, DisplayOnly},
+        },
+        pci::root_bridge::PciRootBridgeIo,
+    },
 };
+use x86_64::instructions::hlt;
+
+#[global_allocator]
+static GLOBAL_ALLOCATOR: Allocator = Allocator;
 
 #[entry]
 fn main() -> Status {
     uefi::helpers::init().unwrap();
-    let protocol = *boot::locate_handle_buffer(SearchType::ByProtocol(&Tcg::GUID))
-        .unwrap()
-        .first()
-        .unwrap();
-    info!("Protocol: {protocol:#?}");
-    let mut tcg = boot::open_protocol_exclusive::<Tcg>(protocol).unwrap();
-    let event_log = tcg.get_event_log_v2().unwrap();
-    if event_log.is_truncated() {
-        panic!(
-            "Event log is truncated, which means it ran out space. So we can't verify any of the events in the event log!"
+
+    log::info!("Hello from UEFI OS");
+
+    let handle = locate_handle_buffer(SearchType::ByProtocol(
+        &uefi::proto::pci::root_bridge::PciRootBridgeIo::GUID,
+    ))
+    .unwrap()[0];
+    log::info!("Found handle");
+    let mut pci = unsafe {
+        open_protocol::<PciRootBridgeIo>(
+            OpenProtocolParams {
+                agent: image_handle(),
+                controller: None,
+                handle,
+            },
+            OpenProtocolAttributes::GetProtocol,
         )
-    }
-    // Dump events
-    for event in event_log.iter() {
-        let event_type = event.event_type();
-        let pcr_index = event.pcr_index();
-        log::debug!("{event_type:?} {pcr_index:?}");
-        for (algorithm, _data) in event.digests() {
-            log::debug!("  {algorithm:?}");
-        }
+        .unwrap()
+    };
+    log::info!("PCI root bridge: {:?}", pci);
+    let pci_tree = pci.enumerate().unwrap();
+    for addr in pci_tree {
+        log::info!("PCI device: {addr:X?}");
     }
 
-    // Analyze events
-    for event in event_log.iter() {
-        let pcr_index = event.pcr_index();
-        match event.event_type() {
-            EventType::CRTM_VERSION => {
-                let digest = event
-                    .digests()
-                    .into_iter()
-                    .find(|(a, b)| *a == AlgorithmId::SHA256)
-                    .unwrap()
-                    .1
-                    .plain_hex(false);
-                log::debug!("Core Root of Trust for Measurement (CRTM) Version: {digest:x}");
-            }
-            EventType::EFI_PLATFORM_FIRMWARE_BLOB => {
-                if pcr_index.0 == 0 {
-                    log::debug!("Part of Firmware");
-                } else {
-                    log::debug!("Part of Firmware (but {pcr_index:?} for some reason)");
-                }
-            }
-            EventType::EFI_VARIABLE_DRIVER_CONFIG => {
-                log::debug!("measure configuration for EFI Variables");
-            }
-            EventType::SEPARATOR => {
-                log::debug!("Separator (end of code controlling the computer) {pcr_index:?}");
-            }
-            EventType::EFI_BOOT_SERVICES_APPLICATION => {
-                let sha256 = event
-                    .digests()
-                    .into_iter()
-                    .find_map(|(algorithm, digest)| {
-                        if algorithm == AlgorithmId::SHA256 {
-                            Some(digest.plain_hex(false))
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap();
-                log::debug!("UEFI image loaded. sha256: {sha256:x}");
-            }
-            EventType::EFI_ACTION => {
-                // let action = str::from_utf8(event.event_data()).unwrap();
-                // log::debug!("UEFI action: {action:?}");
-            }
-            event_type => {
-                log::debug!("Unknown({event_type:?}) {pcr_index:?}");
-            }
-        }
+    let handle = get_handle_for_protocol::<Serial>().unwrap();
+    let device_path = handle.device_path().unwrap();
+    let device_path_str = alloc::string::String::from_utf16(
+        device_path
+            .to_string16(DisplayOnly(false), AllowShortcuts(false))
+            .unwrap()
+            .to_u16_slice(),
+    )
+    .unwrap();
+    log::info!("Serial handle: {device_path_str}");
+
+    let handle = get_handle_for_protocol::<GraphicsOutput>().unwrap();
+    let mut gop = open_protocol_exclusive::<GraphicsOutput>(handle).unwrap();
+    for mode in gop.modes() {
+        log::info!("Mode: {mode:#?}");
     }
+    after_exit_boot_services(unsafe { exit_boot_services(None) })
+}
 
-    // Replay events
-    // For now we will choose SHA1 to replay
-    let mut expected_pcr_values = [Default::default(); 24];
-    for event in event_log.iter() {
-        let digest = event
-            .digests()
-            .into_iter()
-            .find_map(|(algorithm, digest)| {
-                if algorithm == AlgorithmId::SHA256 {
-                    Some(digest)
-                } else {
-                    None
-                }
-            })
-            .unwrap();
-        let mut hasher = Sha256::new();
-        let pcr_index = event.pcr_index().0 as usize;
-        hasher.update(&expected_pcr_values[pcr_index]);
-        hasher.update(digest);
-        expected_pcr_values[pcr_index] = hasher.finalize();
+fn after_exit_boot_services(memory_map: MemoryMapOwned) -> ! {
+    loop {
+        hlt();
     }
-    for (i, expected) in expected_pcr_values.iter().enumerate() {
-        info!("Expected PCR {i:02}: {:x}", expected.plain_hex(false));
-    }
-
-    // // Do TPM stuff for fun
-    // let mut command = GetRandom::new();
-    // let random_bytes = submit_command(&mut tcg, &mut command).unwrap();
-    // log::debug!("Random bytes: {:x?}", random_bytes);
-
-    // for i in 0..24 {
-    //     let mut command = PcrRead::new(i);
-    //     let pcr_value = submit_command(&mut tcg, &mut command).unwrap();
-    //     if pcr_value.iter().all(|byte| *byte == u8::MAX) {
-    //         log::debug!("PCR {i}: unavailable");
-    //     } else if pcr_value == expected_sha1_pcr_values[i].as_slice() {
-    //         let pcr_value = pcr_value.plain_hex(false);
-    //         log::debug!("PCR {i}: {pcr_value:x} - matches event log");
-    //     } else {
-    //         let pcr_value = pcr_value.plain_hex(false);
-    //         log::debug!("PCR {i}: {pcr_value:x} - does not match event log!");
-    //     };
-    // }
-
-    // let mut command = CreatePrimary::new();
-    // submit_command(&mut tcg, &mut command).unwrap();
-
-    for _ in 0..60 {
-        log::info!("");
-    }
-    Status::SUCCESS
 }

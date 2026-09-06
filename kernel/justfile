@@ -36,9 +36,6 @@ uefi accel='':
         -machine q35,accel={{ if accel == 'y' { 'kvm:whpx:hvf:tcg' } else { 'tcg' } }} \
         -drive if=pflash,format=raw,readonly=on,file=$OVMF_PATH \
         -drive format=raw,file=fat:rw:{{ build_dir_uefi }} \
-        -chardev socket,id=chrtpm,path=/tmp/mytpm1/swtpm-sock \
-        -tpmdev emulator,id=tpm0,chardev=chrtpm \
-        -device tpm-tis,tpmdev=tpm0 \
         --nographic
 
 swtpm:
