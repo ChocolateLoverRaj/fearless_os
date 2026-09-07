@@ -15,7 +15,10 @@ use uefi::{
     prelude::*,
     proto::{
         acpi::AcpiTable,
-        console::{gop::GraphicsOutput, serial::Serial},
+        console::{
+            gop::{BltOp, BltPixel, GraphicsOutput},
+            serial::Serial,
+        },
         device_path::{
             acpi,
             text::{AllowShortcuts, DisplayOnly},
@@ -56,22 +59,30 @@ fn main() -> Status {
         log::info!("PCI device: {addr:X?}");
     }
 
-    let handle = get_handle_for_protocol::<Serial>().unwrap();
-    let device_path = handle.device_path().unwrap();
-    let device_path_str = alloc::string::String::from_utf16(
-        device_path
-            .to_string16(DisplayOnly(false), AllowShortcuts(false))
-            .unwrap()
-            .to_u16_slice(),
-    )
-    .unwrap();
-    log::info!("Serial handle: {device_path_str}");
+    if let Ok(handle) = get_handle_for_protocol::<Serial>() {
+        let device_path = handle.device_path().unwrap();
+        let device_path_str = alloc::string::String::from_utf16(
+            device_path
+                .to_string16(DisplayOnly(false), AllowShortcuts(false))
+                .unwrap()
+                .to_u16_slice(),
+        )
+        .unwrap();
+        log::info!("Serial handle: {device_path_str}");
+    }
 
     let handle = get_handle_for_protocol::<GraphicsOutput>().unwrap();
+    log::info!("Opening GOP protocol exclusive");
     let mut gop = open_protocol_exclusive::<GraphicsOutput>(handle).unwrap();
+    gop.blt(BltOp::VideoFill {
+        color: BltPixel::new(100, 150, 150),
+        dest: (0, 0),
+        dims: (100, 100),
+    });
     for mode in gop.modes() {
         log::info!("Mode: {mode:#?}");
     }
+
     after_exit_boot_services(unsafe { exit_boot_services(None) })
 }
 

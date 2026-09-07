@@ -5,5 +5,5 @@ edition.workspace = true
 
 [dependencies]
 log = { workspace = true }
-uefi = { workspace = true, features = ["alloc", "logger", "panic_handler"] }
+uefi = { workspace = true, features = ["alloc", "panic_handler"] }
 x86_64 = { workspace = true, features = ["instructions"] }

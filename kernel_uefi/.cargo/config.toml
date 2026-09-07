@@ -1,2 +1,0 @@
-[build]
-rustflags = ["--cfg", "sha2_backend=\"soft\""]

@@ -28,6 +28,7 @@ ez_pci = { path = "../ez_pci", default-features = false }
 force-send-sync = { version = "2.0.0", default-features = false }
 futures = { version = "0.3.34", default-features = false }
 gptman = { version = "3.1.1", default-features = false }
+hadris-fat = {version = "2.3.0", default-features = false }
 heapless = { version = "0.9.3", default-features = false }
 log = { version = "0.4.34", default-features = false }
 mbrman = { version = "0.6.1", default-features = false }
@@ -41,6 +42,7 @@ talc = { version = "5.0.4", default-features = false }
 uart_16550 = { version = "0.8.0", default-features = false }
 uefi = { version = "0.40.0", default-features = false }
 unicode-segmentation = { version = "1.13.3", default-features = false }
+uuid = { version = "1.26.0", default-features = false }
 x2apic = { git = "https://github.com/ChocolateLoverRaj/x2apic-rs", branch = "main", default-features = false }
 x86_64 = { git = "https://github.com/rust-osdev/x86_64", branch = "next", default-features = false }
 zerocopy = { version = "0.8.55", default-features = false }

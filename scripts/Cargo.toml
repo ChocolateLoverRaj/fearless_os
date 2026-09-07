@@ -6,5 +6,7 @@ edition.workspace = true
 [dependencies]
 bios_bootloader_common = { workspace = true }
 elf = { workspace = true, features = ["std"] }
+hadris-fat = { workspace = true, features = ["std", "sync", "write"] }
 gptman.workspace = true
 mbrman.workspace = true
+uuid.workspace = true
