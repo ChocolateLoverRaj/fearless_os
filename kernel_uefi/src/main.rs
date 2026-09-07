@@ -3,6 +3,8 @@
 extern crate alloc;
 use core::time::Duration;
 
+mod logger;
+
 use uefi::{
     Identify,
     allocator::Allocator,
@@ -35,45 +37,13 @@ static GLOBAL_ALLOCATOR: Allocator = Allocator;
 fn main() -> Status {
     uefi::helpers::init().unwrap();
 
+    logger::init();
+
     log::info!("Hello from UEFI OS");
 
-    let handle = locate_handle_buffer(SearchType::ByProtocol(
-        &uefi::proto::pci::root_bridge::PciRootBridgeIo::GUID,
-    ))
-    .unwrap()[0];
-    log::info!("Found handle");
-    let mut pci = unsafe {
-        open_protocol::<PciRootBridgeIo>(
-            OpenProtocolParams {
-                agent: image_handle(),
-                controller: None,
-                handle,
-            },
-            OpenProtocolAttributes::GetProtocol,
-        )
-        .unwrap()
-    };
-    log::info!("PCI root bridge: {:?}", pci);
-    let pci_tree = pci.enumerate().unwrap();
-    for addr in pci_tree {
-        log::info!("PCI device: {addr:X?}");
-    }
-
-    if let Ok(handle) = get_handle_for_protocol::<Serial>() {
-        let device_path = handle.device_path().unwrap();
-        let device_path_str = alloc::string::String::from_utf16(
-            device_path
-                .to_string16(DisplayOnly(false), AllowShortcuts(false))
-                .unwrap()
-                .to_u16_slice(),
-        )
-        .unwrap();
-        log::info!("Serial handle: {device_path_str}");
-    }
-
     let handle = get_handle_for_protocol::<GraphicsOutput>().unwrap();
-    log::info!("Opening GOP protocol exclusive");
-    let mut gop = open_protocol_exclusive::<GraphicsOutput>(handle).unwrap();
+    let result = open_protocol_exclusive::<GraphicsOutput>(handle);
+    let mut gop = result.unwrap();
     gop.blt(BltOp::VideoFill {
         color: BltPixel::new(100, 150, 150),
         dest: (0, 0),
@@ -82,11 +52,18 @@ fn main() -> Status {
     for mode in gop.modes() {
         log::info!("Mode: {mode:#?}");
     }
-
     after_exit_boot_services(unsafe { exit_boot_services(None) })
 }
 
 fn after_exit_boot_services(memory_map: MemoryMapOwned) -> ! {
+    loop {
+        hlt();
+    }
+}
+
+#[panic_handler]
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    log::error!("{info}");
     loop {
         hlt();
     }

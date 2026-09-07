@@ -743,10 +743,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "kernel_common"
+version = "1.0.0"
+dependencies = [
+ "embedded-graphics",
+ "log",
+ "owo-colors",
+ "spin",
+ "uefi",
+ "x86_64 0.15.5 (git+https://github.com/rust-osdev/x86_64?branch=next)",
+]
+
+[[package]]
 name = "kernel_uefi"
 version = "1.0.0"
 dependencies = [
+ "kernel_common",
  "log",
+ "spin",
  "uefi",
  "x86_64 0.15.5 (git+https://github.com/rust-osdev/x86_64?branch=next)",
 ]

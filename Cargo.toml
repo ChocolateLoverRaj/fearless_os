@@ -7,7 +7,7 @@ members = [
     "bios_bootloader_small_stage",
     "kernel_uefi",
     "mbr_bootloader",
-    "scripts",
+    "scripts", "kernel_common",
 ]
 
 [workspace.package]
@@ -30,6 +30,7 @@ futures = { version = "0.3.34", default-features = false }
 gptman = { version = "3.1.1", default-features = false }
 hadris-fat = {version = "2.3.0", default-features = false }
 heapless = { version = "0.9.3", default-features = false }
+kernel_common = { path = "kernel_common", default-features = false }
 log = { version = "0.4.34", default-features = false }
 mbrman = { version = "0.6.1", default-features = false }
 nodit = { version = "0.10.0", default-features = false }

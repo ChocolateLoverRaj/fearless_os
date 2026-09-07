@@ -1,16 +1,12 @@
 [package]
-name = "kernel_uefi"
+name = "kernel_common"
 version.workspace = true
 edition.workspace = true
 
-[[bin]]
-name = "kernel_uefi"
-test = false
-bench = false
-
 [dependencies]
 log = { workspace = true }
-kernel_common = { workspace = true }
-spin = { workspace = true, features = ["once"] }
+owo-colors = { workspace = true }
+embedded-graphics = { workspace = true }
 uefi = { workspace = true }
+spin = { workspace = true, features = ["spin_mutex"] }
 x86_64 = { workspace = true, features = ["instructions"] }
