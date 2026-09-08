@@ -49,15 +49,29 @@ fn main() -> Status {
     // }
     // drop(gop);
 
+    log::info!("Switching to GOP frame buffer");
     let mut gop = open_protocol_exclusive::<GraphicsOutput>(handle).unwrap();
+    // let mode_to_use_index = choose_resolution(|| gop.modes().map(|mode| mode.into()))
+    //     .expect("must have at least 1 mode");
+    // let mode = gop.modes().nth(mode_to_use_index).unwrap();
+    // Changing mode is disabled because in qemu this results in diagnoally skewed output, even when calling blt
+    // gop.set_mode(&mode).unwrap();
+    // gop.blt(uefi::proto::console::gop::BltOp::VideoFill {
+    //     color: uefi::proto::console::gop::BltPixel::new(50, 100, 250),
+    //     dest: (0, 0),
+    //     dims: (100, 100),
+    // })
+    // .unwrap();
     let buffer = unsafe {
         FrameBufferEmbeddedGraphics::new(
             NonNull::new(gop.frame_buffer().as_mut_ptr().cast()).unwrap(),
-            gop.current_mode_info().try_into().unwrap(),
+            (&gop.current_mode_info()).try_into().unwrap(),
             true,
         )
     };
     logger::switch_to_gop(buffer);
+    logger().flush();
+    // loop {}
     log::info!("Switched logging from text output to GOP frame buffer.");
     log::info!("Exiting boot services");
     logger().flush();

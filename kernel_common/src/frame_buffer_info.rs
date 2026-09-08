@@ -52,10 +52,10 @@ pub struct FrameBufferInfo {
 //     }
 // }
 
-impl TryFrom<uefi::proto::console::gop::ModeInfo> for FrameBufferInfo {
+impl TryFrom<&uefi::proto::console::gop::ModeInfo> for FrameBufferInfo {
     type Error = FromUefiError;
 
-    fn try_from(value: uefi::proto::console::gop::ModeInfo) -> Result<Self, Self::Error> {
+    fn try_from(value: &uefi::proto::console::gop::ModeInfo) -> Result<Self, Self::Error> {
         Ok({
             let (width, height) = value.resolution();
             FrameBufferInfo {

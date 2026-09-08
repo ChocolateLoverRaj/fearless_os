@@ -79,10 +79,8 @@ impl FrameBufferEmbeddedGraphics<'_> {
         } = &mut self.buffering_mode
             && let Some(changed_lines) = changed_lines.take()
         {
-            let elems_to_copy = usize::try_from(changed_lines.start).unwrap()
-                * usize::try_from(self.info.bytes_per_horizontal_line / 4).unwrap()
-                ..usize::try_from(changed_lines.end).unwrap()
-                    * usize::try_from(self.info.bytes_per_horizontal_line / 4).unwrap();
+            let elems_to_copy = usize::try_from(changed_lines.start).unwrap() * self.pixel_pitch
+                ..usize::try_from(changed_lines.end).unwrap() * self.pixel_pitch;
             self.gpu_buffer[elems_to_copy.clone()].copy_from_slice(&cpu_buffer[elems_to_copy]);
         }
     }

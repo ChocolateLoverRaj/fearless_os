@@ -2,6 +2,7 @@
 extern crate alloc;
 
 pub mod config;
+pub mod frame_buffer;
 pub mod frame_buffer_embedded_graphics;
 pub mod frame_buffer_info;
 pub mod frame_buffer_log_target;

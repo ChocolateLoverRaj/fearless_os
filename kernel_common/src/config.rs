@@ -1,10 +1,28 @@
 use embedded_graphics::mono_font::{self, MonoFont};
 use log::LevelFilter;
 
-pub struct ScreenConfig {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ScreenResolution {
     pub width: u16,
     pub height: u16,
     pub bpp: u8,
+}
+
+impl From<&uefi::proto::console::gop::ModeInfo> for ScreenResolution {
+    fn from(value: &uefi::proto::console::gop::ModeInfo) -> Self {
+        let (width, height) = value.resolution();
+        Self {
+            width: width.try_into().unwrap(),
+            height: height.try_into().unwrap(),
+            bpp: 32,
+        }
+    }
+}
+
+impl From<uefi::proto::console::gop::Mode> for ScreenResolution {
+    fn from(value: uefi::proto::console::gop::Mode) -> Self {
+        value.info().into()
+    }
 }
 
 pub enum ScreenFlush {
@@ -15,7 +33,7 @@ pub enum ScreenFlush {
 pub struct Config {
     /// Useful for testing a specific resolution in virtual machines,
     /// or for using a smaller resolution in virtual machines so the window isn't too big.
-    pub preffered_resolution: Option<ScreenConfig>,
+    pub preffered_resolutions: &'static [ScreenResolution],
     pub screen_log_level: LevelFilter,
     pub serial_log_level: LevelFilter,
     /// If true, will log to the screen and not UART, even if a UART is supported.
@@ -35,11 +53,20 @@ pub struct Config {
 }
 
 pub const CONFIG: Config = Config {
-    preffered_resolution: Some(ScreenConfig {
-        width: 1024,
-        height: 768,
-        bpp: 32,
-    }),
+    preffered_resolutions: &[
+        // Laptops with 720p
+        ScreenResolution {
+            width: 1366,
+            height: 768,
+            bpp: 32,
+        },
+        // Laptops with 720p but with legacy BIOS that doesn't support 720p
+        ScreenResolution {
+            width: 1024,
+            height: 768,
+            bpp: 32,
+        },
+    ],
     screen_log_level: LevelFilter::Info,
     serial_log_level: LevelFilter::Debug,
     prefer_screen_logging: false,
