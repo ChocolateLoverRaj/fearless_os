@@ -6,6 +6,7 @@ use core::ptr::NonNull;
 mod logger;
 
 use kernel_common::frame_buffer_embedded_graphics::FrameBufferEmbeddedGraphics;
+use log::logger;
 use uefi::{
     allocator::Allocator,
     boot::{exit_boot_services, get_handle_for_protocol, open_protocol_exclusive},
@@ -25,6 +26,7 @@ fn main() -> Status {
     logger::init();
 
     log::info!("Hello from UEFI OS");
+    logger().flush();
 
     let handle = get_handle_for_protocol::<GraphicsOutput>().unwrap();
 
@@ -57,14 +59,18 @@ fn main() -> Status {
     };
     logger::switch_to_gop(buffer);
     log::info!("Switched logging from text output to GOP frame buffer.");
+    log::info!("Exiting boot services");
+    logger().flush();
     after_exit_boot_services(unsafe { exit_boot_services(None) })
 }
 
 fn after_exit_boot_services(memory_map: MemoryMapOwned) -> ! {
     log::info!("Exited UEFI boot services");
+    logger().flush();
     for entry in memory_map.entries() {
         log::info!("{entry:?}");
     }
+    logger().flush();
     loop {
         hlt();
     }

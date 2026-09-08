@@ -2,7 +2,11 @@ use log::{LevelFilter, Log};
 use spin::Mutex;
 use x86_64::instructions::interrupts::without_interrupts;
 
-use crate::{log_color::LogColor, log_target::LogTarget};
+use crate::{
+    config::{CONFIG, ScreenFlush},
+    log_color::LogColor,
+    log_target::LogTarget,
+};
 
 pub trait LoggerInner {
     fn target_mut(&mut self) -> &mut dyn LogTarget;
@@ -39,7 +43,9 @@ impl<T: LoggerInner + Send + Sync> Log for Logger<T> {
                 let target = data.target_mut();
                 target.write_with_color(level.into(), &format_args!("{level:5} "));
                 target.write_with_color(LogColor::Default, &format_args!("{msg}\n"));
-                target.flush();
+                if let ScreenFlush::EveryLog = CONFIG.screen_flush {
+                    target.flush();
+                }
             }
         })
     }

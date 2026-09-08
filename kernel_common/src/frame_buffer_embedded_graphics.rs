@@ -1,4 +1,4 @@
-use core::{convert::Infallible, ptr::NonNull};
+use core::{convert::Infallible, ops::Range, ptr::NonNull};
 
 use alloc::{boxed::Box, vec};
 use embedded_graphics::{
@@ -14,7 +14,10 @@ enum BufferingMode {
     /// Draw directly to the GPU memory.
     Direct,
     /// Draw to CPU memory and then copy the entire thing to the GPU mem.
-    DoubleBuffer(Box<[u32]>),
+    DoubleBuffer {
+        cpu_buffer: Box<[u32]>,
+        changed_lines: Option<Range<u32>>,
+    },
 }
 
 pub struct FrameBufferEmbeddedGraphics<'a> {
@@ -39,7 +42,10 @@ impl FrameBufferEmbeddedGraphics<'_> {
                     unsafe { ptr.as_mut() }
                 },
                 buffering_mode: if double_buffer {
-                    BufferingMode::DoubleBuffer(vec![0; buffer_len].into_boxed_slice())
+                    BufferingMode::DoubleBuffer {
+                        cpu_buffer: vec![0; buffer_len].into_boxed_slice(),
+                        changed_lines: None,
+                    }
                 } else {
                     BufferingMode::Direct
                 },
@@ -62,13 +68,22 @@ impl FrameBufferEmbeddedGraphics<'_> {
     fn buffer_mut(&mut self) -> &mut [u32] {
         match &mut self.buffering_mode {
             BufferingMode::Direct => self.gpu_buffer,
-            BufferingMode::DoubleBuffer(buffer) => buffer,
+            BufferingMode::DoubleBuffer { cpu_buffer, .. } => cpu_buffer,
         }
     }
 
     pub fn flush(&mut self) {
-        if let BufferingMode::DoubleBuffer(cpu_buffer) = &self.buffering_mode {
-            self.gpu_buffer.copy_from_slice(cpu_buffer);
+        if let BufferingMode::DoubleBuffer {
+            cpu_buffer,
+            changed_lines,
+        } = &mut self.buffering_mode
+            && let Some(changed_lines) = changed_lines.take()
+        {
+            let elems_to_copy = usize::try_from(changed_lines.start).unwrap()
+                * usize::try_from(self.info.bytes_per_horizontal_line / 4).unwrap()
+                ..usize::try_from(changed_lines.end).unwrap()
+                    * usize::try_from(self.info.bytes_per_horizontal_line / 4).unwrap();
+            self.gpu_buffer[elems_to_copy.clone()].copy_from_slice(&cpu_buffer[elems_to_copy]);
         }
     }
 
@@ -76,6 +91,9 @@ impl FrameBufferEmbeddedGraphics<'_> {
     pub fn shift_up(&mut self, amount: usize) {
         let src = amount * self.pixel_pitch..;
         self.buffer_mut().copy_within(src, 0);
+        if let BufferingMode::DoubleBuffer { changed_lines, .. } = &mut self.buffering_mode {
+            *changed_lines = Some(0..u32::try_from(self.info.height).unwrap());
+        }
     }
 }
 
@@ -99,6 +117,20 @@ impl DrawTarget for FrameBufferEmbeddedGraphics<'_> {
             .into_iter()
             .filter(|Pixel(point, _)| bounding_box.contains(*point))
             .for_each(|Pixel(point, color)| {
+                if let BufferingMode::DoubleBuffer { changed_lines, .. } = &mut self.buffering_mode
+                {
+                    let point_y = u32::try_from(point.y).unwrap();
+                    if let Some(changed_lines) = changed_lines {
+                        if point_y < changed_lines.start {
+                            changed_lines.start = point_y;
+                        }
+                        if point_y >= changed_lines.end {
+                            changed_lines.end = point_y + 1;
+                        }
+                    } else {
+                        *changed_lines = Some(point_y..point_y + 1)
+                    }
+                }
                 let pixel_index = point.y as usize * self.pixel_pitch + point.x as usize;
                 self.buffer_mut()[pixel_index] = self.info.pixel_info.build_pixel(color);
             });
@@ -114,6 +146,20 @@ impl DrawTarget for FrameBufferEmbeddedGraphics<'_> {
             let pixel_index = y * self.pixel_pitch + top_left_x;
             let pixels = &mut self.buffer_mut()[pixel_index..pixel_index + width];
             pixels.fill(pixel);
+        }
+        if let BufferingMode::DoubleBuffer { changed_lines, .. } = &mut self.buffering_mode {
+            let start_y = u32::try_from(area.top_left.y).unwrap();
+            let end_y = u32::try_from(area.top_left.y).unwrap() + area.size.height;
+            if let Some(changed_lines) = changed_lines {
+                if start_y < changed_lines.start {
+                    changed_lines.start = start_y;
+                }
+                if end_y > changed_lines.end {
+                    changed_lines.end = end_y;
+                }
+            } else {
+                *changed_lines = Some(start_y..end_y);
+            }
         }
         Ok(())
     }
