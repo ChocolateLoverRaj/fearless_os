@@ -1,5 +1,7 @@
 // use bios_bootloader_common::bios::vesa::ModeInfo;
 
+use uefi::proto::console::gop::PixelFormat;
+
 use crate::rgb_pixel_info::RgbPixelInfo;
 
 #[derive(Debug, Clone, Copy)]
@@ -50,15 +52,55 @@ pub struct FrameBufferInfo {
 //     }
 // }
 
-impl From<uefi::proto::console::gop::ModeInfo> for FrameBufferInfo {
-    fn from(value: uefi::proto::console::gop::ModeInfo) -> Self {
-        let (width, height) = value.resolution();
-        FrameBufferInfo {
-            width: width.try_into().unwrap(),
-            height: height.try_into().unwrap(),
-            bytes_per_horizontal_line: value.stride() * 4,
-            bits_per_pixel: 32,
-            pixel_info,
-        }
+impl TryFrom<uefi::proto::console::gop::ModeInfo> for FrameBufferInfo {
+    type Error = FromUefiError;
+
+    fn try_from(value: uefi::proto::console::gop::ModeInfo) -> Result<Self, Self::Error> {
+        Ok({
+            let (width, height) = value.resolution();
+            FrameBufferInfo {
+                width: width.try_into().unwrap(),
+                height: height.try_into().unwrap(),
+                bytes_per_horizontal_line: (value.stride() * 4).try_into().unwrap(),
+                bits_per_pixel: 32,
+                pixel_info: match value.pixel_format() {
+                    PixelFormat::BltOnly => Err(FromUefiError::BltOnly)?,
+                    PixelFormat::Rgb => RgbPixelInfo {
+                        red_mask_size: 8,
+                        red_mask_shift: 0,
+                        green_mask_size: 8,
+                        green_mask_shift: 8,
+                        blue_mask_size: 8,
+                        blue_mask_shift: 16,
+                    },
+                    PixelFormat::Bgr => RgbPixelInfo {
+                        red_mask_size: 8,
+                        red_mask_shift: 16,
+                        green_mask_size: 8,
+                        green_mask_shift: 8,
+                        blue_mask_size: 8,
+                        blue_mask_shift: 0,
+                    },
+                    PixelFormat::Bitmask => {
+                        let b = value.pixel_bitmask().ok_or(FromUefiError::NoBitmask)?;
+                        RgbPixelInfo {
+                            red_mask_size: b.red.count_ones().try_into().unwrap(),
+                            red_mask_shift: b.red.trailing_zeros().try_into().unwrap(),
+                            green_mask_size: b.green.count_ones().try_into().unwrap(),
+                            green_mask_shift: b.green.trailing_zeros().try_into().unwrap(),
+                            blue_mask_size: b.blue.count_ones().try_into().unwrap(),
+                            blue_mask_shift: b.blue.trailing_zeros().try_into().unwrap(),
+                        }
+                    }
+                },
+            }
+        })
     }
+}
+
+#[derive(Debug)]
+pub enum FromUefiError {
+    /// GOP does not support frame buffer.
+    BltOnly,
+    NoBitmask,
 }

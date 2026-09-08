@@ -751,6 +751,7 @@ dependencies = [
  "owo-colors",
  "spin",
  "uefi",
+ "unicode-segmentation",
  "x86_64 0.15.5 (git+https://github.com/rust-osdev/x86_64?branch=next)",
 ]
 

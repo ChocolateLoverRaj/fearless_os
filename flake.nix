@@ -60,6 +60,8 @@
               gnumake
               # for crc32
               busybox
+              # for connecting to serial ports
+              picocom
             ];
           };
       }

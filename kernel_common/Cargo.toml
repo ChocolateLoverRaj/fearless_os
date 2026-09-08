@@ -8,5 +8,6 @@ log = { workspace = true }
 owo-colors = { workspace = true }
 embedded-graphics = { workspace = true }
 uefi = { workspace = true }
+unicode-segmentation = { workspace = true }
 spin = { workspace = true, features = ["spin_mutex"] }
 x86_64 = { workspace = true, features = ["instructions"] }

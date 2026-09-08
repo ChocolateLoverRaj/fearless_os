@@ -10,9 +10,16 @@ use embedded_graphics::{
 
 use crate::frame_buffer_info::FrameBufferInfo;
 
+enum BufferingMode {
+    /// Draw directly to the GPU memory.
+    Direct,
+    /// Draw to CPU memory and then copy the entire thing to the GPU mem.
+    DoubleBuffer(Box<[u32]>),
+}
+
 pub struct FrameBufferEmbeddedGraphics<'a> {
     gpu_buffer: &'a mut [u32],
-    our_buffer: Box<[u32]>,
+    buffering_mode: BufferingMode,
     info: FrameBufferInfo,
     pixel_pitch: usize,
     bounding_box: Rectangle,
@@ -21,7 +28,7 @@ pub struct FrameBufferEmbeddedGraphics<'a> {
 impl FrameBufferEmbeddedGraphics<'_> {
     /// # Safety
     /// The frame buffer must be mapped at `addr`
-    pub unsafe fn new(addr: NonNull<u32>, info: FrameBufferInfo) -> Self {
+    pub unsafe fn new(addr: NonNull<u32>, info: FrameBufferInfo, double_buffer: bool) -> Self {
         if info.bits_per_pixel as u32 == u32::BITS {
             let buffer_len =
                 (info.bytes_per_horizontal_line * info.height) as usize / size_of::<u32>();
@@ -31,7 +38,11 @@ impl FrameBufferEmbeddedGraphics<'_> {
                     // Safety: This memory is mapped
                     unsafe { ptr.as_mut() }
                 },
-                our_buffer: vec![0; buffer_len].into_boxed_slice(),
+                buffering_mode: if double_buffer {
+                    BufferingMode::DoubleBuffer(vec![0; buffer_len].into_boxed_slice())
+                } else {
+                    BufferingMode::Direct
+                },
                 info,
                 pixel_pitch: info.bytes_per_horizontal_line as usize / size_of::<u32>(),
                 bounding_box: Rectangle {
@@ -46,16 +57,25 @@ impl FrameBufferEmbeddedGraphics<'_> {
             panic!("DrawTarget implemented for RGB888, but bpp doesn't match RGB888");
         }
     }
-}
 
-impl FrameBufferEmbeddedGraphics<'_> {
+    /// Get the CPU buffer if double buffering is enabled, otherwise get the GPU buffer.
+    fn buffer_mut(&mut self) -> &mut [u32] {
+        match &mut self.buffering_mode {
+            BufferingMode::Direct => self.gpu_buffer,
+            BufferingMode::DoubleBuffer(buffer) => buffer,
+        }
+    }
+
     pub fn flush(&mut self) {
-        self.gpu_buffer.copy_from_slice(&self.our_buffer);
+        if let BufferingMode::DoubleBuffer(cpu_buffer) = &self.buffering_mode {
+            self.gpu_buffer.copy_from_slice(cpu_buffer);
+        }
     }
 
     /// Moves everything on the screen up, leaving the bottom the same as it was before
     pub fn shift_up(&mut self, amount: usize) {
-        self.our_buffer.copy_within(amount * self.pixel_pitch.., 0);
+        let src = amount * self.pixel_pitch..;
+        self.buffer_mut().copy_within(src, 0);
     }
 }
 
@@ -80,7 +100,7 @@ impl DrawTarget for FrameBufferEmbeddedGraphics<'_> {
             .filter(|Pixel(point, _)| bounding_box.contains(*point))
             .for_each(|Pixel(point, color)| {
                 let pixel_index = point.y as usize * self.pixel_pitch + point.x as usize;
-                self.our_buffer[pixel_index] = self.info.pixel_info.build_pixel(color);
+                self.buffer_mut()[pixel_index] = self.info.pixel_info.build_pixel(color);
             });
         Ok(())
     }
@@ -92,7 +112,7 @@ impl DrawTarget for FrameBufferEmbeddedGraphics<'_> {
         let top_left_x = area.top_left.x as usize;
         for y in area.top_left.y as usize..area.top_left.y as usize + area.size.height as usize {
             let pixel_index = y * self.pixel_pitch + top_left_x;
-            let pixels = &mut self.our_buffer[pixel_index..pixel_index + width];
+            let pixels = &mut self.buffer_mut()[pixel_index..pixel_index + width];
             pixels.fill(pixel);
         }
         Ok(())
