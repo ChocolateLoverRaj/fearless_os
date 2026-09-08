@@ -10,7 +10,7 @@ bench = false
 
 [dependencies]
 log = { workspace = true }
-kernel_common = { workspace = true }
+kernel_common = { workspace = true, features = ["alloc"] }
 spin = { workspace = true, features = ["once"] }
 uefi = { workspace = true }
 x86_64 = { workspace = true, features = ["instructions"] }

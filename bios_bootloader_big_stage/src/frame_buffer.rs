@@ -5,11 +5,9 @@ use bios_bootloader_common::{
     paging::LeafMappingFlags,
     pat::WRITE_COMBINING_INDEX,
 };
+use kernel_common::frame_buffer_embedded_graphics::{BufferingMode, FrameBufferEmbeddedGraphics};
 
-use crate::{
-    config::CONFIG, frame_buffer_embedded_graphics::FrameBufferEmbeddedGraphics, logger,
-    memory::map_phys,
-};
+use crate::{config::CONFIG, logger, memory::map_phys};
 
 pub fn init(bios_fns: BiosFns) {
     let vbe_info = bios_fns.get_vbe_info().unwrap();
@@ -83,7 +81,9 @@ pub fn init(bios_fns: BiosFns) {
         .unwrap();
         bios_fns.vesa_set_mode(mode, true).unwrap();
         let ptr = NonNull::new(frame_buffer_virt_addr as *mut u32).unwrap();
-        let f = unsafe { FrameBufferEmbeddedGraphics::new(ptr, (&info).into()) };
+        let f = unsafe {
+            FrameBufferEmbeddedGraphics::new(ptr, (&info).into(), BufferingMode::DoubleBuffer)
+        };
         log::info!("Switching logger to frame buffer.");
         logger::init_frame_buffer(f, CONFIG.prefer_screen_logging);
         log::info!("Switched logger to frame buffer.");

@@ -19,6 +19,7 @@ ez_pci = { workspace = true }
 force-send-sync = { workspace = true }
 futures = { workspace = true }
 heapless = { workspace = true }
+kernel_common = { workspace = true, features = ["alloc"] }
 log = { workspace = true }
 nodit = { workspace = true }
 owo-colors = { workspace = true }

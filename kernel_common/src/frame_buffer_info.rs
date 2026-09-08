@@ -5,7 +5,6 @@ use uefi::proto::console::gop::PixelFormat;
 use crate::rgb_pixel_info::RgbPixelInfo;
 
 #[derive(Debug, Clone, Copy)]
-#[non_exhaustive]
 pub struct FrameBufferInfo {
     pub width: u64,
     pub height: u64,

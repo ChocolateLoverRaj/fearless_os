@@ -5,7 +5,7 @@ use core::ptr::NonNull;
 
 mod logger;
 
-use kernel_common::frame_buffer_embedded_graphics::FrameBufferEmbeddedGraphics;
+use kernel_common::frame_buffer_embedded_graphics::{BufferingMode, FrameBufferEmbeddedGraphics};
 use log::logger;
 use uefi::{
     allocator::Allocator,
@@ -66,7 +66,7 @@ fn main() -> Status {
         FrameBufferEmbeddedGraphics::new(
             NonNull::new(gop.frame_buffer().as_mut_ptr().cast()).unwrap(),
             (&gop.current_mode_info()).try_into().unwrap(),
-            true,
+            BufferingMode::DoubleBuffer,
         )
     };
     logger::switch_to_gop(buffer);

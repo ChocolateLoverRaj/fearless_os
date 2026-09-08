@@ -2,6 +2,7 @@ use core::ptr::{NonNull, addr_of};
 
 use arbitrary_int::u9;
 use bitbybit::bitfield;
+use kernel_common::{frame_buffer_info::FrameBufferInfo, rgb_pixel_info::RgbPixelInfo};
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout,
     little_endian::{U16, U32},
@@ -255,6 +256,25 @@ pub struct VesaModeAttributes {
     mode_type: bool,
     #[bit(7, rw)]
     linear_frame_buffer_mode_available: bool,
+}
+
+impl From<&ModeInfo> for FrameBufferInfo {
+    fn from(value: &ModeInfo) -> Self {
+        Self {
+            width: value.x_resolution.get().into(),
+            height: value.y_resolution.get().into(),
+            bytes_per_horizontal_line: value.lin_bytes_per_scan.get().into(),
+            bits_per_pixel: value.bits_per_pixel.into(),
+            pixel_info: RgbPixelInfo {
+                red_mask_shift: value.lin_red_field_position,
+                red_mask_size: value.lin_red_mask_size,
+                green_mask_shift: value.lin_green_field_position,
+                green_mask_size: value.lin_green_mask_size,
+                blue_mask_shift: value.lin_blue_field_position,
+                blue_mask_size: value.lin_blue_mask_size,
+            },
+        }
+    }
 }
 
 impl BiosFns {

@@ -1,8 +1,7 @@
 use core::{cmp::min, fmt::Write};
 
 use bios_bootloader_common::{bios::BiosFns, writer_with_cr::WriterWithCr};
-
-use crate::log_target::LogTarget;
+use kernel_common::{log_color::LogColor, log_target::LogTarget};
 
 pub struct VesaTextLogTarget {
     bios_fns: BiosFns,
@@ -19,7 +18,7 @@ impl VesaTextLogTarget {
 }
 
 impl LogTarget for VesaTextLogTarget {
-    fn write_with_color(&mut self, _color: crate::log_target::Color, msg: &dyn core::fmt::Display) {
+    fn write_with_color(&mut self, _color: LogColor, msg: &dyn core::fmt::Display) {
         struct Int10Writer<'a> {
             bios_fns: BiosFns,
             buffer: &'a mut heapless::Vec<u8, 512>,

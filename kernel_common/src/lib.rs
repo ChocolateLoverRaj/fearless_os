@@ -1,4 +1,5 @@
 #![no_std]
+#[cfg(feature = "alloc")]
 extern crate alloc;
 
 pub mod config;
@@ -10,5 +11,6 @@ pub mod frame_buffer_writer;
 pub mod log_color;
 pub mod log_target;
 pub mod logger;
+// pub mod memory;
 pub mod nop_log_target;
 pub mod rgb_pixel_info;
