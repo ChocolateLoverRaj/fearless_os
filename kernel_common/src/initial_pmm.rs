@@ -1,16 +1,32 @@
-use core::ops::Range;
+use core::{borrow::Borrow, ops::Range};
+
+/// Entries must be sorted.
+pub trait InitialFreeMem: Send + Sync {
+    fn get(&self, index: usize) -> Option<Range<u64>>;
+    fn last(&self) -> Option<Range<u64>>;
+}
+
+impl<T: Borrow<[Range<u64>]> + Send + Sync> InitialFreeMem for T {
+    fn get(&self, index: usize) -> Option<Range<u64>> {
+        self.borrow().get(index).cloned()
+    }
+
+    fn last(&self) -> Option<Range<u64>> {
+        self.borrow().last().cloned()
+    }
+}
 
 /// A Physical Memory Manager (PMM) that doesn't need any initial PMM.
 /// This is implemented as a bump allocator.
 /// It can be used to intialize a better PMM.
 pub struct InitialPmm<'a> {
-    original_free_memory: &'a [Range<u64>],
+    original_free_memory: &'a dyn InitialFreeMem,
     current_index: usize,
     current_offset: u64,
 }
 
 impl<'a> InitialPmm<'a> {
-    pub fn new(free_memory: &'a [Range<u64>]) -> Self {
+    pub fn new(free_memory: &'a dyn InitialFreeMem) -> Self {
         Self {
             original_free_memory: free_memory,
             current_index: 0,

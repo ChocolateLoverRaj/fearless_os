@@ -2,19 +2,22 @@ use core::{ptr::NonNull, str::FromStr};
 
 use acpi::aml::{self, namespace::AmlName, pci_routing::PciRoutingTable};
 use arbitrary_int::{traits::Integer, u3, u5};
-use bios_bootloader_common::{paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
 use ez_ehci::{
     AnyEhci, InitDeviceBuffer, InitDeviceError, MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS,
     PeriodicFrameList, RunOutput, TryTakeOutput, new_ehci,
 };
 use ez_pci::{BarWithSize, MemoryBarAddrAndSizeU64, PciAccess, PciFunction};
+use kernel_common::{
+    memory::{alloc_phys, map_phys},
+    paging::LeafMappingFlags,
+    pat::STRONG_UNCACHEABLE_INDEX,
+};
 use log::logger;
 use x86_64::instructions::hlt;
 
 use crate::{
     acpi_events::ACPI_GLOBALS,
     acpi_handler::{PCIE_MAPPINGS, SEGMENT_MAPPED_LEN},
-    memory::{alloc_phys, map_phys},
 };
 
 pub fn run() -> ! {

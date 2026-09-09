@@ -14,16 +14,13 @@ mod frame_buffer;
 mod free_iterator;
 mod global_allocator;
 mod hpet;
-mod initial_pmm;
 mod interrupts;
 mod linked_list;
 mod logger;
 mod memory;
-mod pat;
 mod physical_memory;
 mod range_utils;
 mod rgb_pixel_info;
-mod scratch_tables;
 mod uart_log_target;
 mod vesa_text_log_target;
 mod vmm;
@@ -51,12 +48,7 @@ use acpi::{
 };
 use alloc::vec;
 use arbitrary_int::{traits::Integer, u3, u5};
-use bios_bootloader_common::{
-    big_stage_api::BigStageEntryInfo,
-    bios::BiosFns,
-    paging::LeafMappingFlags,
-    pat::{STRONG_UNCACHEABLE_INDEX, WRITE_THROUGH_INDEX},
-};
+use bios_bootloader_common::{big_stage_api::BigStageEntryInfo, bios::BiosFns};
 use ez_ehci::{
     AnyEhci, InitDeviceBuffer, MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS, PeriodicFrameList,
     RunOutput, TryTakeOutput, new_ehci,
@@ -73,7 +65,6 @@ use crate::{
     bios_data_area::BiosDataArea,
     config::CONFIG,
     hpet::sleep,
-    memory::{alloc_phys, map_phys},
 };
 
 unsafe extern "C" {

@@ -3,15 +3,15 @@ use acpi::{
     platform::{AcpiPlatform, InterruptModel},
 };
 use alloc::boxed::Box;
-use bios_bootloader_common::{paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
 use force_send_sync::Send as ForceSend;
+use kernel_common::{memory::map_phys, paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
 use spin::{Mutex, Once};
 use x2apic::{
     ioapic::{IoApic, IrqFlags, IrqMode, RedirectionTableEntry},
     lapic::{LocalApic, LocalApicBuilder, cpu_has_x2apic},
 };
 
-use crate::{interrupts::IrqAssignments, memory::map_phys};
+use crate::interrupts::IrqAssignments;
 
 static LOCAL_APIC: Once<Mutex<ForceSend<LocalApic>>> = Once::new();
 static IO_APICS: Once<Mutex<Box<[(u32, IoApic)]>>> = Once::new();

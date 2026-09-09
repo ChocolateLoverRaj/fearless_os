@@ -1,13 +1,14 @@
 use core::ptr::NonNull;
 
-use bios_bootloader_common::{
-    bios::{BiosFns, vesa::VesaModeAttributes},
+use bios_bootloader_common::bios::{BiosFns, vesa::VesaModeAttributes};
+use kernel_common::{
+    frame_buffer_embedded_graphics::{BufferingMode, FrameBufferEmbeddedGraphics},
+    memory::map_phys,
     paging::LeafMappingFlags,
     pat::WRITE_COMBINING_INDEX,
 };
-use kernel_common::frame_buffer_embedded_graphics::{BufferingMode, FrameBufferEmbeddedGraphics};
 
-use crate::{config::CONFIG, logger, memory::map_phys};
+use crate::{config::CONFIG, logger};
 
 pub fn init(bios_fns: BiosFns) {
     let vbe_info = bios_fns.get_vbe_info().unwrap();

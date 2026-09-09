@@ -17,6 +17,7 @@ spin = { workspace = true, features = ["once", "spin_mutex", "mutex"] }
 unicode-segmentation = { workspace = true }
 x86_64 = { workspace = true, features = ["instructions"] }
 zerocopy = { workspace = true, features = ["derive"] }
+kernel_common.workspace = true
 
 [build-dependencies]
 bios_bootloader_common = { workspace = true }

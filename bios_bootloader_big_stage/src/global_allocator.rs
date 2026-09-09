@@ -1,7 +1,6 @@
 use bios_bootloader_common::OFFSET_MAP_VIRT_ADDR;
+use kernel_common::memory::alloc_phys;
 use talc::{DefaultBinning, source::Source, sync::TalcLock};
-
-use crate::memory::alloc_phys;
 
 #[derive(Debug)]
 struct TalcSource;

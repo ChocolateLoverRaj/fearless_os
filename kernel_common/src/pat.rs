@@ -1,5 +1,5 @@
 use arbitrary_int::u3;
-use x86_64::registers::model_specific::PatMemoryType;
+use x86_64::registers::model_specific::{Pat, PatMemoryType};
 
 pub const OUR_PAT: [PatMemoryType; 8] = [
     // Keep the 4 as they would be without PAT
@@ -19,3 +19,9 @@ pub const WRITE_BACK_INDEX: u3 = u3::new(0);
 pub const WRITE_THROUGH_INDEX: u3 = u3::new(1);
 pub const STRONG_UNCACHEABLE_INDEX: u3 = u3::new(3);
 pub const WRITE_COMBINING_INDEX: u3 = u3::new(4);
+
+/// # Safety
+/// Changes PAT MSR.
+pub unsafe fn init() {
+    unsafe { Pat::write(OUR_PAT) };
+}

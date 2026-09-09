@@ -12,6 +12,8 @@ use bios_bootloader_common::{
     big_stage_api::{self, BigStageEntryInfo},
     bios::{BiosFns, RealModeAddr},
     logger,
+};
+use kernel_common::{
     paging::{
         LeafMapping, LeafMappingFlags, LeafMappingSize, PageTable, ScratchPageTable, TopLevel,
         TopLevelPageTable,

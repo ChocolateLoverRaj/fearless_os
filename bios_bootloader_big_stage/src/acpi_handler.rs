@@ -3,17 +3,15 @@ use core::{hint::spin_loop, ptr::NonNull, time::Duration};
 use acpi::{AcpiTables, Handler, PciAddress, sdt::mcfg::Mcfg};
 use alloc::collections::btree_map::BTreeMap;
 use arbitrary_int::{u3, u5, u12};
-use bios_bootloader_common::{
-    OFFSET_MAP_VIRT_ADDR, paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX,
-};
+use bios_bootloader_common::OFFSET_MAP_VIRT_ADDR;
 use ez_pci::{PciAccess, PciReadWriteValue, PcieInfo};
+use kernel_common::{memory::map_phys, paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
 use spin::Mutex;
 use x86_64::instructions::port::Port;
 
 use crate::{
     async_executor::execute_future,
     hpet::{HPET, sleep},
-    memory::map_phys,
 };
 
 pub struct PcieData {

@@ -10,18 +10,16 @@ use core::{
 use acpi::{AcpiTables, HpetInfo};
 use alloc::{collections::binary_heap::BinaryHeap, sync::Arc};
 use arbitrary_int::u5;
-use bios_bootloader_common::{paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
 use ez_hpet::{
     ApicDestMode, DeliveryMode, Hpet, HpetMemory, InterruptConfig, InterruptTrigger,
     LEGACY_REPLACEMENT_ROUTES, RedirectionHint, TimerMode,
 };
 use futures::task::AtomicWaker;
+use kernel_common::{memory::map_phys, paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
 use spin::{Mutex, Once};
 use x86_64::instructions::interrupts::without_interrupts;
 
-use crate::{
-    acpi_handler::AcpiHandler, apic, config::CONFIG, interrupts::IrqAssignments, memory::map_phys,
-};
+use crate::{acpi_handler::AcpiHandler, apic, config::CONFIG, interrupts::IrqAssignments};
 
 pub static HPET: Once<Hpet<'static>> = Once::new();
 

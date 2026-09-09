@@ -4,13 +4,17 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+arbitrary-int = { workspace = true }
+bitbybit = { workspace = true }
 log = { workspace = true }
 owo-colors = { workspace = true }
 embedded-graphics = { workspace = true }
 uefi = { workspace = true }
 unicode-segmentation = { workspace = true }
+raw-cpuid = { workspace = true }
 spin = { workspace = true, features = ["spin_mutex"] }
 x86_64 = { workspace = true, features = ["instructions"] }
+zerocopy = { workspace = true }
 
 [features]
 alloc = []

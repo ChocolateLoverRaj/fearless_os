@@ -135,6 +135,7 @@ dependencies = [
  "bios_bootloader_common",
  "bitbybit",
  "elf",
+ "kernel_common",
  "log",
  "spin",
  "unicode-segmentation",
@@ -748,13 +749,17 @@ dependencies = [
 name = "kernel_common"
 version = "1.0.0"
 dependencies = [
+ "arbitrary-int",
+ "bitbybit",
  "embedded-graphics",
  "log",
  "owo-colors",
+ "raw-cpuid 11.6.0",
  "spin",
  "uefi",
  "unicode-segmentation",
  "x86_64 0.15.5 (git+https://github.com/rust-osdev/x86_64?branch=next)",
+ "zerocopy",
 ]
 
 [[package]]

@@ -10,7 +10,7 @@ use log::logger;
 use uefi::{
     allocator::Allocator,
     boot::{exit_boot_services, get_handle_for_protocol, open_protocol_exclusive},
-    mem::memory_map::{MemoryMap, MemoryMapOwned},
+    mem::memory_map::{MemoryMap, MemoryMapMut, MemoryMapOwned},
     prelude::*,
     proto::console::gop::GraphicsOutput,
 };
@@ -78,8 +78,9 @@ fn main() -> Status {
     after_exit_boot_services(unsafe { exit_boot_services(None) })
 }
 
-fn after_exit_boot_services(memory_map: MemoryMapOwned) -> ! {
+fn after_exit_boot_services(mut memory_map: MemoryMapOwned) -> ! {
     log::info!("Exited UEFI boot services");
+    memory_map.sort();
     logger().flush();
     for entry in memory_map.entries() {
         log::info!("{entry:?}");
