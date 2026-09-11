@@ -9,6 +9,7 @@ use acpi::{
     registers::Pm1EventFlags,
 };
 use alloc::vec;
+use log::logger;
 use spin::Once;
 use x86_64::{
     instructions::tables::load_tss,
@@ -23,7 +24,7 @@ use x86_64::{
 use crate::{
     acpi_events::{self, ACPI_GLOBALS, platform},
     apic::end_of_interrupt,
-    hpet, logger,
+    hpet,
 };
 
 pub struct Gdt {
@@ -92,11 +93,13 @@ extern "x86-interrupt" fn sci_interrupt_handler(_stack_frame: InterruptStackFram
         platform
             .registers
             .pm1_control_registers
-            .set_sleep_typ((*slp_type_a).try_into().unwrap());
+            .set_sleep_typ((*slp_type_a).try_into().unwrap())
+            .unwrap();
         platform
             .registers
             .pm1_control_registers
-            .set_bit(acpi::registers::Pm1ControlBit::SleepEnable, true);
+            .set_bit(acpi::registers::Pm1ControlBit::SleepEnable, true)
+            .unwrap();
         log::info!("Did shutdown. You shouldn't see this");
         logger().flush();
     }

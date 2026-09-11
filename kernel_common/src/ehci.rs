@@ -1,5 +1,12 @@
 use core::{ptr::NonNull, str::FromStr};
 
+use crate::{
+    acpi_events::ACPI_GLOBALS,
+    acpi_handler::{PCIE_MAPPINGS, SEGMENT_MAPPED_LEN},
+    memory::{alloc_phys, map_phys},
+    paging::LeafMappingFlags,
+    pat::STRONG_UNCACHEABLE_INDEX,
+};
 use acpi::aml::{self, namespace::AmlName, pci_routing::PciRoutingTable};
 use arbitrary_int::{traits::Integer, u3, u5};
 use ez_ehci::{
@@ -7,18 +14,8 @@ use ez_ehci::{
     PeriodicFrameList, RunOutput, TryTakeOutput, new_ehci,
 };
 use ez_pci::{BarWithSize, MemoryBarAddrAndSizeU64, PciAccess, PciFunction};
-use kernel_common::{
-    memory::{alloc_phys, map_phys},
-    paging::LeafMappingFlags,
-    pat::STRONG_UNCACHEABLE_INDEX,
-};
 use log::logger;
 use x86_64::instructions::hlt;
-
-use crate::{
-    acpi_events::ACPI_GLOBALS,
-    acpi_handler::{PCIE_MAPPINGS, SEGMENT_MAPPED_LEN},
-};
 
 pub fn run() -> ! {
     let aml = aml::Interpreter::new_from_platform(&ACPI_GLOBALS.get().unwrap().platform).unwrap();

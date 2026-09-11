@@ -1,5 +1,9 @@
 use spin::{Mutex, Once};
-use x86_64::registers::control::{Efer, EferFlags};
+use x86_64::{
+    PhysAddr,
+    registers::control::{Cr3, Cr3Flags, Efer, EferFlags},
+    structures::paging::PhysFrame,
+};
 
 use crate::{
     initial_pmm::{InitialFreeMem, InitialPmm},
@@ -24,7 +28,7 @@ static MEMORY: Once<Mutex<Memory>> = Once::new();
 ///
 /// Must be called exactly once.
 pub unsafe fn init(
-    initial_free_mem: &'static dyn InitialFreeMem,
+    initial_free_mem: &'static mut dyn InitialFreeMem,
     initial_offset_map: VirtMemRange,
     dynamic_virt_info: VirtMemRange,
     offset_map_range: VirtMemRange,
@@ -36,11 +40,13 @@ pub unsafe fn init(
     // Enable no-execute flag
     unsafe { Efer::update(|efer| efer.insert(EferFlags::NO_EXECUTE_ENABLE)) };
 
+    let map_phys_end = initial_free_mem.phys_end_addr();
     let mut pmm = InitialPmm::new(initial_free_mem);
 
     // Offset map everything
     let mut scratch_tables_allocator = ScratchTablesAllocator::new(&mut pmm, initial_offset_map);
     // Safety: offset and page table is valid
+    let top_level_page_table_is_none = top_level_page_table.is_none();
     let mut pt = top_level_page_table.unwrap_or_else(|| unsafe {
         TopLevelPageTable::new(
             initial_offset_map.addr,
@@ -49,7 +55,6 @@ pub unsafe fn init(
         )
     });
     let mapping_size = LeafMappingSize::max_supported();
-    let map_phys_end = initial_free_mem.last().unwrap().end;
     let n_pages = map_phys_end.div_ceil(mapping_size.byte_size());
     for i in 0..n_pages {
         let phys_addr = mapping_size.byte_size() * i;
@@ -65,6 +70,15 @@ pub unsafe fn init(
             },
         );
         unsafe { pt.ensure_mapped_leaf(mapping, &mut scratch_tables_allocator) }.unwrap();
+    }
+
+    if top_level_page_table_is_none {
+        unsafe {
+            Cr3::write(
+                PhysFrame::from_start_address(PhysAddr::new(pt.phys_addr())).unwrap(),
+                Cr3Flags::empty(),
+            )
+        };
     }
 
     MEMORY.call_once(|| {

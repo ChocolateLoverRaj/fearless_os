@@ -3,27 +3,15 @@
 #![feature(abi_x86_interrupt, allocator_api)]
 extern crate alloc;
 
-mod acpi_events;
-mod acpi_handler;
-mod apic;
-mod async_executor;
 mod bios_data_area;
-mod config;
-mod ehci;
 mod frame_buffer;
 mod free_iterator;
-mod global_allocator;
-mod hpet;
-mod interrupts;
 mod linked_list;
 mod logger;
 mod memory;
 mod physical_memory;
 mod range_utils;
-mod rgb_pixel_info;
-mod uart_log_target;
 mod vesa_text_log_target;
-mod vmm;
 
 use core::{
     arch::naked_asm,
@@ -48,24 +36,27 @@ use acpi::{
 };
 use alloc::vec;
 use arbitrary_int::{traits::Integer, u3, u5};
-use bios_bootloader_common::{big_stage_api::BigStageEntryInfo, bios::BiosFns};
+use bios_bootloader_common::{
+    OFFSET_MAP_VIRT_ADDR, big_stage_api::BigStageEntryInfo, bios::BiosFns,
+};
 use ez_ehci::{
     AnyEhci, InitDeviceBuffer, MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS, PeriodicFrameList,
     RunOutput, TryTakeOutput, new_ehci,
 };
 use ez_pci::{BarWithSize, MemoryBarAddrAndSizeU64, PciAccess, PciFunction};
+use kernel_common::{
+    acpi_events,
+    acpi_handler::{self, AcpiHandler},
+    apic,
+    config::CONFIG,
+    ehci, hpet, interrupts,
+};
 use log::logger;
 use spin::Once;
 use uart_16550::Uart16550Tty;
 use x86_64::instructions::{hlt, interrupts::int3};
 
-use crate::{
-    acpi_handler::{AcpiHandler, PCIE_MAPPINGS, SEGMENT_MAPPED_LEN},
-    async_executor::execute_future,
-    bios_data_area::BiosDataArea,
-    config::CONFIG,
-    hpet::sleep,
-};
+use crate::bios_data_area::BiosDataArea;
 
 unsafe extern "C" {
     static __start: *const u8;
@@ -113,9 +104,6 @@ struct Stack {
 }
 static mut STACK: Stack = Stack { data: [0; _] };
 
-const DYNAMIC_VIRT_ADDR: u64 = 0xFFFF_8000_4000_0000;
-const DYNAMIC_VIRT_LEN: u64 = 0x3FFFC0000000;
-
 struct UsableMemNode {
     start: u64,
     len: u64,
@@ -154,17 +142,19 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
 
     frame_buffer::init(bios_fns);
 
-    let rsdp = unsafe { Rsdp::search_for_on_bios(AcpiHandler {}) }.unwrap();
+    let acpi_handler = AcpiHandler {
+        offset_map_virt_addr: OFFSET_MAP_VIRT_ADDR,
+    };
+    let rsdp = unsafe { Rsdp::search_for_on_bios(acpi_handler.clone()) }.unwrap();
     log::info!("RSDP: {:#X?}", rsdp.get());
-    let acpi_tables =
-        unsafe { AcpiTables::from_rsdp(AcpiHandler {}, rsdp.physical_start) }.unwrap();
+    let acpi_tables = unsafe { AcpiTables::from_rsdp(acpi_handler, rsdp.physical_start) }.unwrap();
     for (_phys_addr, table) in acpi_tables.table_headers() {
         let signature = table.signature;
         log::info!("ACPI Table: {signature}.");
     }
     acpi_handler::init(&acpi_tables);
 
-    let platform = AcpiPlatform::new(acpi_tables, AcpiHandler {}).unwrap();
+    let platform = AcpiPlatform::new(acpi_tables, acpi_handler).unwrap();
     log::info!("Got platform");
 
     unsafe { apic::init(&platform) };

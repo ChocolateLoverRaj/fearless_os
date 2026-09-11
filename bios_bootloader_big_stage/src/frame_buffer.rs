@@ -2,13 +2,14 @@ use core::ptr::NonNull;
 
 use bios_bootloader_common::bios::{BiosFns, vesa::VesaModeAttributes};
 use kernel_common::{
+    config::CONFIG,
     frame_buffer_embedded_graphics::{BufferingMode, FrameBufferEmbeddedGraphics},
     memory::map_phys,
     paging::LeafMappingFlags,
     pat::WRITE_COMBINING_INDEX,
 };
 
-use crate::{config::CONFIG, logger};
+use crate::logger;
 
 pub fn init(bios_fns: BiosFns) {
     let vbe_info = bios_fns.get_vbe_info().unwrap();
@@ -23,7 +24,8 @@ pub fn init(bios_fns: BiosFns) {
     let mode_to_use = {
         let mut mode_to_use = None;
         // First check if our preffered mode is available
-        if let Some(preffered) = CONFIG.preffered_resolution {
+        // TODO: Check all resolutions
+        if let Some(preffered) = CONFIG.preffered_resolutions.get(0) {
             mode_to_use = mode_list.into_iter().find_map(|mode| {
                 let info = bios_fns.vesa_get_mode_info(mode).unwrap();
                 if info.x_resolution.get() == preffered.width

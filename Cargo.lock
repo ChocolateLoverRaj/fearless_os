@@ -103,6 +103,7 @@ dependencies = [
  "pic8259",
  "spin",
  "spinning_top",
+ "static_cell",
  "talc",
  "uart_16550",
  "unicode-segmentation",
@@ -749,15 +750,26 @@ dependencies = [
 name = "kernel_common"
 version = "1.0.0"
 dependencies = [
+ "acpi",
  "arbitrary-int",
  "bitbybit",
  "embedded-graphics",
+ "ez_ehci",
+ "ez_hpet",
+ "ez_pci",
+ "force-send-sync",
+ "futures",
  "log",
  "owo-colors",
+ "pic8259",
  "raw-cpuid 11.6.0",
  "spin",
+ "spinning_top",
+ "talc",
+ "uart_16550",
  "uefi",
  "unicode-segmentation",
+ "x2apic",
  "x86_64 0.15.5 (git+https://github.com/rust-osdev/x86_64?branch=next)",
  "zerocopy",
 ]
@@ -766,9 +778,11 @@ dependencies = [
 name = "kernel_uefi"
 version = "1.0.0"
 dependencies = [
+ "force-send-sync",
  "kernel_common",
  "log",
  "spin",
+ "static_cell",
  "uefi",
  "x86_64 0.15.5 (git+https://github.com/rust-osdev/x86_64?branch=next)",
 ]
@@ -923,6 +937,12 @@ name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
+
+[[package]]
+name = "portable-atomic"
+version = "1.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05c8b63e8d9609db387f0324918f81d68fe27748f084ef092fb35954d0539a85"
 
 [[package]]
 name = "proc-macro2"
@@ -1119,6 +1139,15 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
+
+[[package]]
+name = "static_cell"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0530892bb4fa575ee0da4b86f86c667132a94b74bb72160f58ee5a4afec74c23"
+dependencies = [
+ "portable-atomic",
+]
 
 [[package]]
 name = "strsim"

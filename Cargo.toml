@@ -39,6 +39,7 @@ pic8259 = { version = "0.11.0", default-features = false }
 raw-cpuid = { version = "11.6.0", default-features = false }
 spin = { version = "0.12.2", default-features = false }
 spinning_top = { version = "0.3.0", default-features = false }
+static_cell = { version = "2.1.1", default-features = false }
 talc = { version = "5.0.4", default-features = false }
 uart_16550 = { version = "0.8.0", default-features = false }
 uefi = { version = "0.40.0", default-features = false }

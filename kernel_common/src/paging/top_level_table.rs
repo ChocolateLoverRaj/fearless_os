@@ -34,6 +34,10 @@ impl TopLevelPageTable {
         }
     }
 
+    pub fn phys_addr(&self) -> u64 {
+        self.addr
+    }
+
     /// Creates a mapping that points to an existing page table. For example, you could use it to map the lower 256 TiB in a 128 PiB page table to an existing 256 TiB page table. Uses up to 3 scratch tables to create child page tables as needed.
     ///
     ///  # Safety

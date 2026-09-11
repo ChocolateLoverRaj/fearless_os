@@ -1,10 +1,10 @@
+use crate::{memory::map_phys, paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
 use acpi::{
     aml::resource::{InterruptPolarity, InterruptTrigger, IrqDescriptor},
     platform::{AcpiPlatform, InterruptModel},
 };
 use alloc::boxed::Box;
 use force_send_sync::Send as ForceSend;
-use kernel_common::{memory::map_phys, paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
 use spin::{Mutex, Once};
 use x2apic::{
     ioapic::{IoApic, IrqFlags, IrqMode, RedirectionTableEntry},

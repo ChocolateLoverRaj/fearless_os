@@ -4,17 +4,28 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+acpi = { workspace = true, optional = true, features = ["aml"] }
 arbitrary-int = { workspace = true }
 bitbybit = { workspace = true }
+ez_ehci = { workspace = true }
+ez_hpet = { workspace = true }
+ez_pci = { workspace = true }
+force-send-sync = { workspace = true }
+futures = { workspace = true }
 log = { workspace = true }
 owo-colors = { workspace = true }
+pic8259 = { workspace = true }
 embedded-graphics = { workspace = true }
+uart_16550 = { workspace = true }
 uefi = { workspace = true }
 unicode-segmentation = { workspace = true }
 raw-cpuid = { workspace = true }
 spin = { workspace = true, features = ["spin_mutex"] }
-x86_64 = { workspace = true, features = ["instructions"] }
+spinning_top = { workspace = true }
+talc = { workspace = true, optional = true }
+x86_64 = { workspace = true, features = ["abi_x86_interrupt", "instructions"] }
 zerocopy = { workspace = true }
+x2apic = { workspace = true }
 
 [features]
-alloc = []
+alloc = ["dep:talc", "dep:acpi"]

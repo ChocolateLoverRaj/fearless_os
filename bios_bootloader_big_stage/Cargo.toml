@@ -26,6 +26,7 @@ owo-colors = { workspace = true }
 pic8259 = { workspace = true }
 spin = { workspace = true }
 spinning_top = { workspace = true }
+static_cell = { workspace = true }
 talc = { workspace = true }
 uart_16550 = { workspace = true }
 unicode-segmentation = { workspace = true }

@@ -1,23 +1,22 @@
 #![no_std]
 #![no_main]
+#![feature(abi_x86_interrupt)]
 extern crate alloc;
 use core::ptr::NonNull;
 
 mod logger;
+mod memory;
 
+use alloc::boxed::Box;
 use kernel_common::frame_buffer_embedded_graphics::{BufferingMode, FrameBufferEmbeddedGraphics};
 use log::logger;
 use uefi::{
-    allocator::Allocator,
     boot::{exit_boot_services, get_handle_for_protocol, open_protocol_exclusive},
     mem::memory_map::{MemoryMap, MemoryMapMut, MemoryMapOwned},
     prelude::*,
     proto::console::gop::GraphicsOutput,
 };
 use x86_64::instructions::hlt;
-
-#[global_allocator]
-static GLOBAL_ALLOCATOR: Allocator = Allocator;
 
 #[entry]
 fn main() -> Status {
@@ -66,7 +65,7 @@ fn main() -> Status {
         FrameBufferEmbeddedGraphics::new(
             NonNull::new(gop.frame_buffer().as_mut_ptr().cast()).unwrap(),
             (&gop.current_mode_info()).try_into().unwrap(),
-            BufferingMode::DoubleBuffer,
+            BufferingMode::Direct,
         )
     };
     logger::switch_to_gop(buffer);
@@ -80,12 +79,14 @@ fn main() -> Status {
 
 fn after_exit_boot_services(mut memory_map: MemoryMapOwned) -> ! {
     log::info!("Exited UEFI boot services");
-    memory_map.sort();
     logger().flush();
+    memory_map.sort();
     for entry in memory_map.entries() {
         log::info!("{entry:?}");
     }
+    log::info!("Entries count: {}", memory_map.len());
     logger().flush();
+    unsafe { memory::init(memory_map) };
     loop {
         hlt();
     }
@@ -94,6 +95,7 @@ fn after_exit_boot_services(mut memory_map: MemoryMapOwned) -> ! {
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
     log::error!("{info}");
+    logger().flush();
     loop {
         hlt();
     }

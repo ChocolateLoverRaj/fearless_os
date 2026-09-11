@@ -3,15 +3,16 @@ use core::{hint::spin_loop, ptr::NonNull, time::Duration};
 use acpi::{AcpiTables, Handler, PciAddress, sdt::mcfg::Mcfg};
 use alloc::collections::btree_map::BTreeMap;
 use arbitrary_int::{u3, u5, u12};
-use bios_bootloader_common::OFFSET_MAP_VIRT_ADDR;
 use ez_pci::{PciAccess, PciReadWriteValue, PcieInfo};
-use kernel_common::{memory::map_phys, paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
 use spin::Mutex;
 use x86_64::instructions::port::Port;
 
 use crate::{
     async_executor::execute_future,
     hpet::{HPET, sleep},
+    memory::map_phys,
+    paging::LeafMappingFlags,
+    pat::STRONG_UNCACHEABLE_INDEX,
 };
 
 pub struct PcieData {
@@ -28,8 +29,10 @@ const ACPI_MAPPING_FLAGS: LeafMappingFlags = LeafMappingFlags {
     pat_index: STRONG_UNCACHEABLE_INDEX,
 };
 
-#[derive(Clone)]
-pub struct AcpiHandler;
+#[derive(Clone, Copy, Debug)]
+pub struct AcpiHandler {
+    pub offset_map_virt_addr: u64,
+}
 
 impl AcpiHandler {
     fn read_pci<T: PciReadWriteValue>(&self, address: PciAddress, offset: u16) -> T {
@@ -97,57 +100,65 @@ impl Handler for AcpiHandler {
 
     fn read_u8(&self, address: usize) -> u8 {
         // FIXME: Ensure mapped
-        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
-            .unwrap();
+        let ptr =
+            NonNull::new((self.offset_map_virt_addr + u64::try_from(address).unwrap()) as *mut _)
+                .unwrap();
         unsafe { ptr.read() }
     }
 
     fn read_u16(&self, address: usize) -> u16 {
         // FIXME: Ensure mapped
-        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
-            .unwrap();
+        let ptr =
+            NonNull::new((self.offset_map_virt_addr + u64::try_from(address).unwrap()) as *mut _)
+                .unwrap();
         unsafe { ptr.read() }
     }
 
     fn read_u32(&self, address: usize) -> u32 {
         // FIXME: Ensure mapped
-        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
-            .unwrap();
+        let ptr =
+            NonNull::new((self.offset_map_virt_addr + u64::try_from(address).unwrap()) as *mut _)
+                .unwrap();
         unsafe { ptr.read() }
     }
 
     fn read_u64(&self, address: usize) -> u64 {
         // FIXME: Ensure mapped
-        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
-            .unwrap();
+        let ptr =
+            NonNull::new((self.offset_map_virt_addr + u64::try_from(address).unwrap()) as *mut _)
+                .unwrap();
         unsafe { ptr.read() }
     }
 
     fn write_u8(&self, address: usize, value: u8) {
         // FIXME: Ensure mapped
-        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
-            .unwrap();
+        let ptr =
+            NonNull::new((self.offset_map_virt_addr + u64::try_from(address).unwrap()) as *mut _)
+                .unwrap();
         unsafe { ptr.write(value) }
     }
 
     fn write_u16(&self, address: usize, value: u16) {
         // FIXME: Ensure mapped
-        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
-            .unwrap();
+        let ptr =
+            NonNull::new((self.offset_map_virt_addr + u64::try_from(address).unwrap()) as *mut _)
+                .unwrap();
         unsafe { ptr.write(value) }
     }
 
     fn write_u32(&self, address: usize, value: u32) {
         // FIXME: Ensure mapped
-        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
-            .unwrap();
+        let ptr =
+            NonNull::new((self.offset_map_virt_addr + u64::try_from(address).unwrap()) as *mut _)
+                .unwrap();
         unsafe { ptr.write(value) }
     }
 
     fn write_u64(&self, address: usize, value: u64) {
         // FIXME: Ensure mapped
-        let ptr = NonNull::new((OFFSET_MAP_VIRT_ADDR + u64::try_from(address).unwrap()) as *mut _)
-            .unwrap();
+        let ptr =
+            NonNull::new((self.offset_map_virt_addr + u64::try_from(address).unwrap()) as *mut _)
+                .unwrap();
         unsafe { ptr.write(value) }
     }
 

@@ -1,23 +1,47 @@
 use core::{ops::Range, ptr::addr_of};
 
 use bios_bootloader_common::{
-    OFFSET_MAP_LEN, OFFSET_MAP_VIRT_ADDR, big_stage_api::BigStageEntryInfo, bios::BiosFns,
+    DYNAMIC_VIRT_ADDR, DYNAMIC_VIRT_LEN, OFFSET_MAP_LEN, OFFSET_MAP_VIRT_ADDR,
+    big_stage_api::BigStageEntryInfo, bios::BiosFns,
 };
 use heapless::Vec;
 use kernel_common::{
-    memory,
+    global_allocator::{KernelGlobalAllocator, new_global_allocator},
+    initial_pmm::InitialFreeMem,
+    memory::{self},
     paging::{TopLevel, TopLevelPageTable},
     vmm::VirtMemRange,
 };
-use spin::Once;
+use static_cell::StaticCell;
 use x86_64::registers::control::Cr3;
 
 use crate::{
-    __bss_end, __start, DYNAMIC_VIRT_ADDR, DYNAMIC_VIRT_LEN,
+    __bss_end, __start,
     range_utils::{SubtractRangesIterator, is_overlap},
 };
 
-static INITIAL_FREE_MEM: Once<Vec<Range<u64>, 32>> = Once::new();
+static INITIAL_FREE_MEM: StaticCell<InitialFreeMemBios> = StaticCell::new();
+
+struct InitialFreeMemBios {
+    mem_entries: Vec<Range<u64>, 32>,
+    index: usize,
+}
+
+impl InitialFreeMem for InitialFreeMemBios {
+    fn phys_end_addr(&self) -> u64 {
+        self.mem_entries.last().unwrap().end
+    }
+}
+
+impl Iterator for InitialFreeMemBios {
+    type Item = Range<u64>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let item = self.mem_entries.get(self.index)?;
+        self.index += 1;
+        Some(item.clone())
+    }
+}
 
 /// # Safety
 ///
@@ -55,7 +79,10 @@ pub unsafe fn init(info: &BigStageEntryInfo, bios_fns: BiosFns) {
         .map(|data| data.base_addr..data.base_addr + data.len)
         .flat_map(|range| SubtractRangesIterator::new(range, used_ranges.iter().cloned()))
         .collect::<heapless::Vec<_, _>>();
-    let free_mem_ranges = INITIAL_FREE_MEM.call_once(|| free_mem_ranges);
+    let free_mem_ranges = INITIAL_FREE_MEM.init(InitialFreeMemBios {
+        mem_entries: free_mem_ranges,
+        index: 0,
+    });
 
     let top_level_page_table_phys_addr = Cr3::read().0.start_address().as_u64();
     // Safety: offset and page table is valid
@@ -86,3 +113,7 @@ pub unsafe fn init(info: &BigStageEntryInfo, bios_fns: BiosFns) {
         )
     };
 }
+
+#[global_allocator]
+static GLOBAL_ALLOCATOR: KernelGlobalAllocator =
+    unsafe { new_global_allocator(OFFSET_MAP_VIRT_ADDR) };

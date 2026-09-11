@@ -1,14 +1,31 @@
 #![no_std]
+#![feature(abi_x86_interrupt)]
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
+#[cfg(feature = "alloc")]
+pub mod acpi_events;
+#[cfg(feature = "alloc")]
+pub mod acpi_handler;
+#[cfg(feature = "alloc")]
+pub mod apic;
+#[cfg(feature = "alloc")]
+pub mod async_executor;
 pub mod config;
+#[cfg(feature = "alloc")]
+pub mod ehci;
 pub mod frame_buffer;
 pub mod frame_buffer_embedded_graphics;
 pub mod frame_buffer_info;
 pub mod frame_buffer_log_target;
 pub mod frame_buffer_writer;
+#[cfg(feature = "alloc")]
+pub mod global_allocator;
+#[cfg(feature = "alloc")]
+pub mod hpet;
 pub mod initial_pmm;
+#[cfg(feature = "alloc")]
+pub mod interrupts;
 pub mod log_color;
 pub mod log_target;
 pub mod logger;
@@ -18,4 +35,5 @@ pub mod paging;
 pub mod pat;
 pub mod rgb_pixel_info;
 pub mod scratch_tables;
+pub mod uart_log_target;
 pub mod vmm;

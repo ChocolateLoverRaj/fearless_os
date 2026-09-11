@@ -2,18 +2,18 @@ use core::cmp::max;
 
 use bios_bootloader_common::bios::BiosFns;
 use kernel_common::{
+    config::CONFIG,
     frame_buffer_embedded_graphics::FrameBufferEmbeddedGraphics,
     frame_buffer_log_target::FrameBufferLogTarget,
     log_target::LogTarget,
     logger::{Logger, LoggerInner},
+    uart_log_target::UartLogTarget,
 };
 use log::{LevelFilter, set_logger, set_max_level};
 use spin::Once;
 use uart_16550::{Uart16550Tty, backend::PioBackend};
 
-use crate::{
-    config::CONFIG, uart_log_target::UartLogTarget, vesa_text_log_target::VesaTextLogTarget,
-};
+use crate::vesa_text_log_target::VesaTextLogTarget;
 
 enum LoggerData {
     VesaText(VesaTextLogTarget),

@@ -1,6 +1,6 @@
 use core::fmt::Write;
 
-use kernel_common::{log_color::LogColor, log_target::LogTarget};
+use crate::{log_color::LogColor, log_target::LogTarget};
 use uart_16550::{Uart16550Tty, backend::PioBackend};
 
 pub struct UartLogTarget {
@@ -16,7 +16,7 @@ impl UartLogTarget {
 impl LogTarget for UartLogTarget {
     fn write_with_color(&mut self, color: LogColor, msg: &dyn core::fmt::Display) {
         let msg = color.color_msg(msg);
-        write!(&mut self.uart, "{msg}");
+        let _ = write!(&mut self.uart, "{msg}");
     }
 
     fn flush(&mut self) {}
