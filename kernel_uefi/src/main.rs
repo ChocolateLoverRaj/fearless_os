@@ -8,15 +8,34 @@ mod logger;
 mod memory;
 
 use alloc::boxed::Box;
-use kernel_common::frame_buffer_embedded_graphics::{BufferingMode, FrameBufferEmbeddedGraphics};
+use kernel_common::{
+    frame_buffer_embedded_graphics::{BufferingMode, FrameBufferEmbeddedGraphics},
+    interrupts,
+};
 use log::logger;
 use uefi::{
     boot::{exit_boot_services, get_handle_for_protocol, open_protocol_exclusive},
     mem::memory_map::{MemoryMap, MemoryMapMut, MemoryMapOwned},
     prelude::*,
     proto::console::gop::GraphicsOutput,
+    table::{
+        cfg::{self, ConfigTableEntry},
+        system_table_raw,
+    },
 };
-use x86_64::instructions::hlt;
+use x86_64::instructions::{hlt, interrupts::int3};
+
+#[derive(Debug, Clone, Copy)]
+enum RsdpType {
+    Rsdp,
+    Xsdt,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RsdpInfo {
+    _type: RsdpType,
+    addr: usize,
+}
 
 #[entry]
 fn main() -> Status {
@@ -72,21 +91,57 @@ fn main() -> Status {
     logger().flush();
     // loop {}
     log::info!("Switched logging from text output to GOP frame buffer.");
+
+    let system_table = system_table_raw().unwrap();
+    let system_table = unsafe { system_table.as_ref() };
+    let config_table = NonNull::slice_from_raw_parts(
+        NonNull::new(system_table.configuration_table).unwrap(),
+        system_table.number_of_configuration_table_entries,
+    );
+    let config_table = unsafe { config_table.as_ref() };
+
+    let rsdp_info = config_table
+        .iter()
+        .find_map(|entry| {
+            if entry.vendor_guid == ConfigTableEntry::ACPI2_GUID {
+                Some(RsdpInfo {
+                    _type: RsdpType::Xsdt,
+                    addr: entry.vendor_table.addr(),
+                })
+            } else if entry.vendor_guid == ConfigTableEntry::ACPI_GUID {
+                Some(RsdpInfo {
+                    _type: RsdpType::Rsdp,
+                    addr: entry.vendor_table.addr(),
+                })
+            } else {
+                None
+            }
+        })
+        .unwrap();
+
     log::info!("Exiting boot services");
     logger().flush();
-    after_exit_boot_services(unsafe { exit_boot_services(None) })
+    after_exit_boot_services(unsafe { exit_boot_services(None) }, rsdp_info)
 }
 
-fn after_exit_boot_services(mut memory_map: MemoryMapOwned) -> ! {
+fn after_exit_boot_services(mut memory_map: MemoryMapOwned, rsdp_info: RsdpInfo) -> ! {
     log::info!("Exited UEFI boot services");
+    log::info!("RSDP info: {rsdp_info:#X?}");
     logger().flush();
     memory_map.sort();
     for entry in memory_map.entries() {
-        log::info!("{entry:?}");
+        log::debug!("{entry:?}");
     }
-    log::info!("Entries count: {}", memory_map.len());
+    log::debug!("Entries count: {}", memory_map.len());
     logger().flush();
     unsafe { memory::init(memory_map) };
+    log::info!("Initialized memory");
+    logger().flush();
+    interrupts::init();
+    log::info!("Initialized interrupts");
+    logger().flush();
+    int3();
+
     loop {
         hlt();
     }
