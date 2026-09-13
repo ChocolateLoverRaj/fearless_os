@@ -18,8 +18,9 @@ use log::logger;
 use x86_64::instructions::hlt;
 
 pub fn run() -> ! {
-    let aml = aml::Interpreter::new_from_platform(&ACPI_GLOBALS.get().unwrap().platform).unwrap();
-    aml.initialize_namespace();
+    // let aml = aml::Interpreter::new_from_platform(&ACPI_GLOBALS.get().unwrap().platform).unwrap();
+    // aml.initialize_namespace();
+    let aml = &ACPI_GLOBALS.get().unwrap().aml_interpreter;
     let pci_routing_table =
         PciRoutingTable::from_prt_path(AmlName::from_str(r#"\_SB.PCI0._PRT"#).unwrap(), &aml)
             .unwrap();

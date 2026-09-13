@@ -10,7 +10,7 @@ mod memory;
 use alloc::boxed::Box;
 use kernel_common::{
     frame_buffer_embedded_graphics::{BufferingMode, FrameBufferEmbeddedGraphics},
-    interrupts,
+    interrupts, x86_64_init,
 };
 use log::logger;
 use uefi::{
@@ -24,6 +24,8 @@ use uefi::{
     },
 };
 use x86_64::instructions::{hlt, interrupts::int3};
+
+use crate::memory::OFFSET_MAP_VIRT_ADDR;
 
 #[derive(Debug, Clone, Copy)]
 enum RsdpType {
@@ -100,19 +102,11 @@ fn main() -> Status {
     );
     let config_table = unsafe { config_table.as_ref() };
 
-    let rsdp_info = config_table
+    let rsdp = config_table
         .iter()
         .find_map(|entry| {
-            if entry.vendor_guid == ConfigTableEntry::ACPI2_GUID {
-                Some(RsdpInfo {
-                    _type: RsdpType::Xsdt,
-                    addr: entry.vendor_table.addr(),
-                })
-            } else if entry.vendor_guid == ConfigTableEntry::ACPI_GUID {
-                Some(RsdpInfo {
-                    _type: RsdpType::Rsdp,
-                    addr: entry.vendor_table.addr(),
-                })
+            if entry.vendor_guid == ConfigTableEntry::ACPI_GUID {
+                Some(entry.vendor_table.addr())
             } else {
                 None
             }
@@ -121,12 +115,12 @@ fn main() -> Status {
 
     log::info!("Exiting boot services");
     logger().flush();
-    after_exit_boot_services(unsafe { exit_boot_services(None) }, rsdp_info)
+    after_exit_boot_services(unsafe { exit_boot_services(None) }, rsdp)
 }
 
-fn after_exit_boot_services(mut memory_map: MemoryMapOwned, rsdp_info: RsdpInfo) -> ! {
+fn after_exit_boot_services(mut memory_map: MemoryMapOwned, rsdp: usize) -> ! {
     log::info!("Exited UEFI boot services");
-    log::info!("RSDP info: {rsdp_info:#X?}");
+    log::info!("RSDP: {rsdp:#X?}");
     logger().flush();
     memory_map.sort();
     for entry in memory_map.entries() {
@@ -141,6 +135,10 @@ fn after_exit_boot_services(mut memory_map: MemoryMapOwned, rsdp_info: RsdpInfo)
     log::info!("Initialized interrupts");
     logger().flush();
     int3();
+
+    unsafe { x86_64_init::init(OFFSET_MAP_VIRT_ADDR, rsdp) };
+
+    x86_64::instructions::interrupts::enable();
 
     loop {
         hlt();

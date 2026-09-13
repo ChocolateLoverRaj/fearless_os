@@ -1,7 +1,7 @@
 BUILD_DIR := build
 R := scripts/Cargo.toml scripts/Cargo.lock scripts/src/lib.rs
 
-.PHONY: default, run, run_with_graphic, ndisasm, run_uefi, run_uefi_with_graphic, run_uefi_usb
+.PHONY: default, run_bios, run_bios_with_graphic, ndisasm, run_uefi, run_uefi_with_graphic, run_uefi_usb
 
 default: run
 
@@ -43,7 +43,7 @@ $(BUILD_DIR)/kernel.efi: | $(BUILD_DIR)
 $(BUILD_DIR)/disk.img: $(BUILD_DIR)/disk_sector_0.bin $(BUILD_DIR)/sector_0.bin $(BUILD_DIR)/small_stage.bin $(BUILD_DIR)/util.bin $(BUILD_DIR)/big_stage.bin $(BUILD_DIR)/kernel.efi | $(BUILD_DIR)
 	cargo r -p scripts --bin build_disk
 
-run: $(BUILD_DIR)/disk.img
+run_bios: $(BUILD_DIR)/disk.img
 	qemu-system-x86_64 \
         --machine q35,accel=kvm:whpx:hvf:tcg -d int,cpu_reset -D $(BUILD_DIR)/qemu.log -m 4G \
         --no-reboot \
@@ -53,6 +53,14 @@ run: $(BUILD_DIR)/disk.img
         -trace "usb_ehci_*" \
         -d trace:pci_cfg_write \
         --nographic
+
+run_bios_with_graphic: $(BUILD_DIR)/disk.img
+	qemu-system-x86_64 \
+       --machine q35,accel=kvm:whpx:hvf:tcg -d int,cpu_reset -D $(BUILD_DIR)/qemu.log -m 4G \
+       --cpu qemu64,+la57 \
+       --no-reboot \
+       -drive file=$(BUILD_DIR)/disk.img,format=raw,if=ide,snapshot=on \
+       -serial mon:stdio
 
 run_uefi: $(BUILD_DIR)/kernel.efi
 	mkdir -p $(BUILD_DIR)/efi_partition/EFI/BOOT
@@ -71,7 +79,8 @@ run_uefi_with_graphic: $(BUILD_DIR)/kernel.efi
        --machine q35,accel=kvm:whpx:hvf:tcg -d int,cpu_reset -D $(BUILD_DIR)/qemu.log -m 4G \
        --no-reboot \
        -drive if=pflash,format=raw,readonly=on,file=$(OVMF_PATH) \
-       -drive format=raw,file=fat:rw:$(BUILD_DIR)/efi_partition
+       -drive format=raw,file=fat:rw:$(BUILD_DIR)/efi_partition \
+       -serial mon:stdio
 
 run_uefi_usb: $(BUILD_DIR)/disk.img
 	qemu-system-x86_64 \
@@ -83,14 +92,6 @@ run_uefi_usb: $(BUILD_DIR)/disk.img
        -device usb-storage,bus=xhci.0,drive=stick,removable=on \
        -drive file=$(BUILD_DIR)/disk.img,format=raw,if=ide,snapshot=on \
        --nographic
-
-run_with_graphic: $(BUILD_DIR)/disk.img
-	qemu-system-x86_64 \
-       --machine q35,accel=kvm:whpx:hvf:tcg -d int,cpu_reset -D $(BUILD_DIR)/qemu.log -m 4G \
-       --cpu qemu64,+la57 \
-       --no-reboot \
-       -drive file=$(BUILD_DIR)/disk.img,format=raw,if=ide,snapshot=on \
-       -serial mon:stdio
 
 ndisasm: $(BUILD_DIR)/sector_0.bin
 	ndisasm -o 0x7C00 $(BUILD_DIR)/sector_0.bin

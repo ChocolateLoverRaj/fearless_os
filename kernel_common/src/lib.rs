@@ -37,3 +37,5 @@ pub mod rgb_pixel_info;
 pub mod scratch_tables;
 pub mod uart_log_target;
 pub mod vmm;
+#[cfg(feature = "alloc")]
+pub mod x86_64_init;

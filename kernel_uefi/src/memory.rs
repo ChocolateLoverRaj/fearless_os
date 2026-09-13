@@ -13,10 +13,10 @@ use uefi::{
     mem::memory_map::{MemoryMap, MemoryMapOwned},
 };
 
-const OFFSET_MAP_VIRT_ADDR: u64 = 0;
-const OFFSET_MAP_LEN: u64 = 0x400000000000;
-const DYNAMIC_VIRT_ADDR: u64 = 0x400000000000;
-const DYNAMIC_VIRT_LEN: u64 = 0x400000000000;
+pub const OFFSET_MAP_VIRT_ADDR: u64 = 0;
+pub const OFFSET_MAP_LEN: u64 = 0x400000000000;
+pub const DYNAMIC_VIRT_ADDR: u64 = 0x400000000000;
+pub const DYNAMIC_VIRT_LEN: u64 = 0x400000000000;
 
 static INITIAL_FREE_MEM: StaticCell<UefiInitialFreeMem> = StaticCell::new();
 

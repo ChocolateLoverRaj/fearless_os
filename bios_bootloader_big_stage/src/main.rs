@@ -6,7 +6,6 @@ extern crate alloc;
 mod bios_data_area;
 mod frame_buffer;
 mod free_iterator;
-mod linked_list;
 mod logger;
 mod memory;
 mod physical_memory;
@@ -49,7 +48,7 @@ use kernel_common::{
     acpi_handler::{self, AcpiHandler},
     apic,
     config::CONFIG,
-    ehci, hpet, interrupts,
+    ehci, hpet, interrupts, x86_64_init,
 };
 use log::logger;
 use spin::Once;
@@ -147,37 +146,8 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
     };
     let rsdp = unsafe { Rsdp::search_for_on_bios(acpi_handler.clone()) }.unwrap();
     log::info!("RSDP: {:#X?}", rsdp.get());
-    let acpi_tables = unsafe { AcpiTables::from_rsdp(acpi_handler, rsdp.physical_start) }.unwrap();
-    for (_phys_addr, table) in acpi_tables.table_headers() {
-        let signature = table.signature;
-        log::info!("ACPI Table: {signature}.");
-    }
-    acpi_handler::init(&acpi_tables);
 
-    let platform = AcpiPlatform::new(acpi_tables, acpi_handler).unwrap();
-    log::info!("Got platform");
-
-    unsafe { apic::init(&platform) };
-
-    if CONFIG.enter_acpi_mode {
-        platform.enter_acpi_mode().unwrap();
-        log::info!("Entered ACPI mode");
-    }
-
-    let fadt = platform.tables.find_table::<Fadt>().unwrap();
-    let sci_interrupt = fadt.sci_interrupt;
-    log::info!("SCI Interrupt IRQ: {sci_interrupt:#X}");
-
-    hpet::init(&platform.tables);
-
-    // execute_future(async {
-    //     loop {
-    //         sleep(Duration::from_secs(1)).await;
-    //         log::info!("after sleep");
-    //     }
-    // });
-
-    unsafe { acpi_events::init(platform) };
+    unsafe { x86_64_init::init(OFFSET_MAP_VIRT_ADDR, rsdp.physical_start) };
 
     ehci::run()
 }

@@ -72,6 +72,6 @@ pub const CONFIG: Config = Config {
     prefer_screen_logging: false,
     font: mono_font::iso_8859_16::FONT_6X13,
     screen_flush: ScreenFlush::Manually,
-    enter_acpi_mode: false,
+    enter_acpi_mode: true,
     hpet_prefer_legacy_replacement: true,
 };
