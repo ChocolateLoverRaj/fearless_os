@@ -2,13 +2,15 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 extern crate alloc;
-use core::ptr::NonNull;
+use core::{ptr::NonNull, time::Duration};
 
 mod logger;
 mod memory;
 
 use kernel_common::{
+    async_executor::execute_future,
     frame_buffer_embedded_graphics::{BufferingMode, FrameBufferEmbeddedGraphics},
+    hpet::sleep,
     interrupts, serial, x86_64_init,
 };
 use log::logger;
@@ -116,7 +118,7 @@ fn main() -> Status {
 
 fn after_exit_boot_services(mut memory_map: MemoryMapOwned, rsdp: usize) -> ! {
     log::info!("Exited UEFI boot services");
-    log::info!("RSDP: {rsdp:#X?}");
+    log::debug!("RSDP: {rsdp:#X?}");
     logger().flush();
     memory_map.sort();
     for entry in memory_map.entries() {
@@ -125,10 +127,10 @@ fn after_exit_boot_services(mut memory_map: MemoryMapOwned, rsdp: usize) -> ! {
     log::debug!("Entries count: {}", memory_map.len());
     logger().flush();
     unsafe { memory::init(memory_map) };
-    log::info!("Initialized memory");
+    log::debug!("Initialized memory");
     logger().flush();
     interrupts::init();
-    log::info!("Initialized interrupts");
+    log::debug!("Initialized interrupts");
     logger().flush();
     int3();
 
@@ -141,6 +143,18 @@ fn after_exit_boot_services(mut memory_map: MemoryMapOwned, rsdp: usize) -> ! {
     }
 
     x86_64::instructions::interrupts::enable();
+    log::info!("Enabled interrupts");
+    logger().flush();
+
+    execute_future(async {
+        let mut count = 0_u64;
+        loop {
+            log::info!("Count: {count}");
+            logger().flush();
+            sleep(Duration::from_secs(1)).await;
+            count += 1;
+        }
+    });
 
     loop {
         hlt();

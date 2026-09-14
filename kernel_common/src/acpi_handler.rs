@@ -188,38 +188,26 @@ impl Handler for AcpiHandler {
     }
 
     fn read_pci_u8(&self, address: acpi::PciAddress, offset: u16) -> u8 {
-        log::info!("Reading PCI u8 at address: {address:?}, offset: {offset:#X}");
         self.read_pci(address, offset)
     }
 
     fn read_pci_u16(&self, address: acpi::PciAddress, offset: u16) -> u16 {
-        log::info!("Reading PCI u16 at address: {address:?}, offset: {offset:#X}");
         self.read_pci(address, offset)
     }
 
     fn read_pci_u32(&self, address: acpi::PciAddress, offset: u16) -> u32 {
-        log::info!("Reading PCI u32 at address: {address:?}, offset: {offset:#X}");
         self.read_pci(address, offset)
     }
 
     fn write_pci_u8(&self, address: acpi::PciAddress, offset: u16, value: u8) {
-        log::info!(
-            "Writing PCI u8 at address: {address:?}, offset: {offset:#X}, value: {value:#X}"
-        );
         self.write_pci(address, offset, value)
     }
 
     fn write_pci_u16(&self, address: acpi::PciAddress, offset: u16, value: u16) {
-        log::info!(
-            "Writing PCI u16 at address: {address:?}, offset: {offset:#X}, value: {value:#X}"
-        );
         self.write_pci(address, offset, value)
     }
 
     fn write_pci_u32(&self, address: acpi::PciAddress, offset: u16, value: u32) {
-        log::info!(
-            "Writing PCI u32 at address: {address:?}, offset: {offset:#X}, value: {value:#X}"
-        );
         self.write_pci(address, offset, value)
     }
 

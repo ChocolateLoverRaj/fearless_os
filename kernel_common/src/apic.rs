@@ -7,7 +7,7 @@ use alloc::boxed::Box;
 use force_send_sync::Send as ForceSend;
 use spin::{Mutex, Once};
 use x2apic::{
-    ioapic::{IoApic, IrqFlags, IrqMode, RedirectionTableEntry},
+    ioapic::{IoApic, IrqFlags, RedirectionTableEntry},
     lapic::{LocalApic, LocalApicBuilder, cpu_has_x2apic},
 };
 
@@ -23,7 +23,7 @@ pub unsafe fn init(platform: &AcpiPlatform<impl acpi::Handler>) {
     let InterruptModel::Apic(apic) = &platform.interrupt_model else {
         panic!("Unknown interrupt model");
     };
-    log::info!("APIC: {apic:#X?}");
+    log::debug!("APIC: {apic:#X?}");
     let mut local_apic_builder = LocalApicBuilder::new();
     local_apic_builder.error_vector(32);
     local_apic_builder.spurious_vector(33);
@@ -104,7 +104,7 @@ fn configure_interrupt(
             }
         })
         .unwrap();
-    log::info!(
+    log::debug!(
         "routing I/O irq {io_irq:#X} to LAPIC irq {lapic_irq:#X} through I/O apic {:#X} entry {:#X}",
         unsafe { io_apic.id() },
         entry_within,

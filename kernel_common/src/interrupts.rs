@@ -50,7 +50,7 @@ pub enum IrqAssignments {
 }
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
-    log::info!("Breakpoint! Stack frame: {stack_frame:#?}");
+    log::debug!("Breakpoint! Stack frame: {stack_frame:#?}");
     logger().flush();
 }
 

@@ -18,11 +18,11 @@ unsafe impl Source for TalcSource {
             .next_multiple_of(layout.align());
         let align = u64::try_from(layout.align()).unwrap().max(0x1000);
 
-        log::info!("allocating {size:#X} with align {align:#X}.");
+        log::trace!("allocating {size:#X} with align {align:#X}.");
         let phy_start = alloc_phys(size.try_into().unwrap(), align)
             .ok_or(())
             .inspect_err(|_| log::warn!("failed to alloc phys mem for global allocator"))?;
-        log::info!("allocated {phy_start:#X}.");
+        log::trace!("allocated {phy_start:#X}.");
 
         unsafe {
             talc.claim(

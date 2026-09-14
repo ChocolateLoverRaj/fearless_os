@@ -55,7 +55,7 @@ static TIMER_LIST: Mutex<BinaryHeap<Reverse<Arc<Timer>>>> = Mutex::new(BinaryHea
 
 pub fn init(acpi_tables: &AcpiTables<AcpiHandler>) {
     let hpet_info = HpetInfo::new(acpi_tables).unwrap();
-    log::info!("HPET Info: {hpet_info:#X?}");
+    log::debug!("HPET Info: {hpet_info:#X?}");
     // Technically we could support 32 bit but to keep code simpler we don't
     assert!(hpet_info.main_counter_is_64bits);
 
@@ -82,7 +82,7 @@ pub fn init(acpi_tables: &AcpiTables<AcpiHandler>) {
     hpet.set_legacy_replacement_enabled(enable_legacy_replacement);
     // Only support 1 timer for now
     let mut timer = hpet.timer(0);
-    log::info!("HPET timer 0: {timer:#?}");
+    log::debug!("HPET timer 0: {timer:#?}");
     let supported_io_apic_interrupts = timer.supported_io_apic_interrupts();
     let supports_fsb_interrupts = timer.supports_fsb_interrupts();
     if supports_fsb_interrupts {
@@ -93,13 +93,13 @@ pub fn init(acpi_tables: &AcpiTables<AcpiHandler>) {
             interrupt_vector: IrqAssignments::Hpet as u8,
             delivery_mode: DeliveryMode::Fixed,
         });
-        log::info!("HPET timer 0 configured to use FSB interrupt")
+        log::debug!("HPET timer 0 configured to use FSB interrupt")
     } else if enable_legacy_replacement {
         timer.configure_interrupt(InterruptConfig::LegacyReplacment {
             trigger: InterruptTrigger::Edge,
         });
         apic::configure_hpet_interrupt(LEGACY_REPLACEMENT_ROUTES[0].apic_mapping);
-        log::info!("HPET timer 0 routed to legacy replacment");
+        log::debug!("HPET timer 0 routed to legacy replacment");
     } else {
         // Avoid interrupts 0..=15 because they can have legacy sources
         let io_apic_interrupt_to_use =
@@ -109,7 +109,7 @@ pub fn init(acpi_tables: &AcpiTables<AcpiHandler>) {
             trigger: InterruptTrigger::Edge,
         });
         apic::configure_hpet_interrupt(io_apic_interrupt_to_use.into());
-        log::info!("HPET timer 0 routed to I/O irq {io_apic_interrupt_to_use:#X}");
+        log::debug!("HPET timer 0 routed to I/O irq {io_apic_interrupt_to_use:#X}");
     }
     timer.set_mode(TimerMode::Oneshot);
     // timer.set_comparator_value(compare_value);
