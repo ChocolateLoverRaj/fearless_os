@@ -1,22 +1,29 @@
-use core::fmt::Write;
+use core::{borrow::BorrowMut, fmt::Write, marker::PhantomData};
 
 use crate::{log_color::LogColor, log_target::LogTarget};
-use uart_16550::{Uart16550Tty, backend::PioBackend};
 
-pub struct UartLogTarget {
-    uart: Uart16550Tty<PioBackend>,
+pub struct UartLogTarget<T, U: ?Sized = T> {
+    uart: T,
+    target: PhantomData<U>,
 }
 
-impl UartLogTarget {
-    pub fn new(uart: Uart16550Tty<PioBackend>) -> Self {
-        Self { uart }
+impl<T, U: ?Sized> UartLogTarget<T, U> {
+    pub fn new(uart: T) -> Self {
+        Self {
+            uart,
+            target: PhantomData,
+        }
     }
 }
 
-impl LogTarget for UartLogTarget {
+impl<T, U: ?Sized> LogTarget for UartLogTarget<T, U>
+where
+    T: BorrowMut<U>,
+    U: Write,
+{
     fn write_with_color(&mut self, color: LogColor, msg: &dyn core::fmt::Display) {
         let msg = color.color_msg(msg);
-        let _ = write!(&mut self.uart, "{msg}");
+        let _ = write!(self.uart.borrow_mut(), "{msg}");
     }
 
     fn flush(&mut self) {}

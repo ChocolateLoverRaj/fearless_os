@@ -1,6 +1,6 @@
 #![no_std]
 #![no_main]
-#![feature(abi_x86_interrupt, allocator_api)]
+#![feature(abi_x86_interrupt)]
 extern crate alloc;
 
 mod bios_data_area;

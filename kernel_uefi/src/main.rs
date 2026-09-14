@@ -7,10 +7,9 @@ use core::ptr::NonNull;
 mod logger;
 mod memory;
 
-use alloc::boxed::Box;
 use kernel_common::{
     frame_buffer_embedded_graphics::{BufferingMode, FrameBufferEmbeddedGraphics},
-    interrupts, x86_64_init,
+    interrupts, serial, x86_64_init,
 };
 use log::logger;
 use uefi::{
@@ -18,10 +17,7 @@ use uefi::{
     mem::memory_map::{MemoryMap, MemoryMapMut, MemoryMapOwned},
     prelude::*,
     proto::console::gop::GraphicsOutput,
-    table::{
-        cfg::{self, ConfigTableEntry},
-        system_table_raw,
-    },
+    table::{cfg::ConfigTableEntry, system_table_raw},
 };
 use x86_64::instructions::{hlt, interrupts::int3};
 
@@ -137,6 +133,12 @@ fn after_exit_boot_services(mut memory_map: MemoryMapOwned, rsdp: usize) -> ! {
     int3();
 
     unsafe { x86_64_init::init(OFFSET_MAP_VIRT_ADDR, rsdp) };
+
+    if let Some(serial) = serial::init() {
+        log::info!("Switching logging to serial");
+        logger::switch_to_serial(serial);
+        log::info!("Switched logging to serial");
+    }
 
     x86_64::instructions::interrupts::enable();
 

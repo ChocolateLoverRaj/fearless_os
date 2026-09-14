@@ -17,7 +17,7 @@ use crate::vesa_text_log_target::VesaTextLogTarget;
 
 enum LoggerData {
     VesaText(VesaTextLogTarget),
-    Uart(UartLogTarget),
+    Uart(UartLogTarget<Uart16550Tty<PioBackend>>),
     FrameBuffer(FrameBufferLogTarget),
 }
 

@@ -29,7 +29,7 @@ impl<T> Logger<T> {
     }
 }
 
-impl<T: LoggerInner + Send + Sync> Log for Logger<T> {
+impl<T: LoggerInner + Send> Log for Logger<T> {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         without_interrupts(|| metadata.level() <= self.data.lock().level_filter())
     }

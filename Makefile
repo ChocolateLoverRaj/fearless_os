@@ -70,7 +70,11 @@ run_uefi: $(BUILD_DIR)/kernel.efi
        --no-reboot \
        -drive if=pflash,format=raw,readonly=on,file=$(OVMF_PATH) \
        -drive format=raw,file=fat:rw:$(BUILD_DIR)/efi_partition \
-       --nographic
+       --nographic \
+       -serial none \
+       -chardev stdio,id=s1,mux=on \
+       -mon chardev=s1,mode=readline \
+       -device pci-serial,chardev=s1
 
 run_uefi_with_graphic: $(BUILD_DIR)/kernel.efi
 	mkdir -p $(BUILD_DIR)/efi_partition/EFI/BOOT
@@ -80,7 +84,9 @@ run_uefi_with_graphic: $(BUILD_DIR)/kernel.efi
        --no-reboot \
        -drive if=pflash,format=raw,readonly=on,file=$(OVMF_PATH) \
        -drive format=raw,file=fat:rw:$(BUILD_DIR)/efi_partition \
-       -serial mon:stdio
+       -chardev stdio,id=s1,mux=on \
+       -mon chardev=s1,mode=readline \
+       -device pci-serial,chardev=s1
 
 run_uefi_usb: $(BUILD_DIR)/disk.img
 	qemu-system-x86_64 \

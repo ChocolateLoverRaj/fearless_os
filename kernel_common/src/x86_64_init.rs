@@ -5,12 +5,10 @@ use crate::{
     acpi_handler::{self, AcpiHandler},
     apic,
     config::CONFIG,
-    hpet, interrupts,
+    hpet,
 };
 
 pub unsafe fn init(offset_map_virt_addr: u64, rsdp: usize) {
-    // interrupts::init();
-
     let acpi_handler = AcpiHandler {
         offset_map_virt_addr,
     };

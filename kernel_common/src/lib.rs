@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(unused_features)]
 #![feature(abi_x86_interrupt)]
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -33,8 +34,14 @@ pub mod memory;
 pub mod nop_log_target;
 pub mod paging;
 pub mod pat;
+#[cfg(feature = "alloc")]
+pub mod pci_serial;
 pub mod rgb_pixel_info;
 pub mod scratch_tables;
+#[cfg(feature = "alloc")]
+pub mod serial;
+#[cfg(feature = "alloc")]
+pub mod spcr;
 pub mod uart_log_target;
 pub mod vmm;
 #[cfg(feature = "alloc")]

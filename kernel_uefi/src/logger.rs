@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use kernel_common::{
     config::CONFIG,
     frame_buffer_embedded_graphics::FrameBufferEmbeddedGraphics,
@@ -5,6 +6,7 @@ use kernel_common::{
     log_color::LogColor,
     log_target::LogTarget,
     logger::{Logger, LoggerInner},
+    uart_log_target::UartLogTarget,
 };
 use log::LevelFilter;
 use spin::Once;
@@ -38,6 +40,7 @@ impl LogTarget for UefiTextOutput {
 enum UefiLoggerInner {
     UefiTextOutput(UefiTextOutput),
     UefiGop(FrameBufferLogTarget),
+    Boxed(UartLogTarget<Box<dyn Write + Send>, dyn Write + Send>),
 }
 
 impl LoggerInner for UefiLoggerInner {
@@ -45,6 +48,7 @@ impl LoggerInner for UefiLoggerInner {
         match self {
             Self::UefiTextOutput(v) => v,
             Self::UefiGop(v) => v,
+            Self::Boxed(v) => v,
         }
     }
 
@@ -53,7 +57,7 @@ impl LoggerInner for UefiLoggerInner {
     }
 }
 
-static LOGGER: Once<Logger<UefiLoggerInner>> = Once::new();
+pub static LOGGER: Once<Logger<UefiLoggerInner>> = Once::new();
 
 pub fn init() {
     if let Ok(handle) = get_handle_for_protocol::<Output>() {
@@ -71,4 +75,12 @@ pub fn switch_to_gop(frame_buffer: FrameBufferEmbeddedGraphics<'static>) {
     LOGGER.get().unwrap().update(|logger| {
         *logger = UefiLoggerInner::UefiGop(FrameBufferLogTarget::new(frame_buffer));
     })
+}
+
+pub fn switch_to_serial(mut serial: Box<dyn Write + Send>) {
+    // Reset colors if there were colors before
+    serial.write_str("\x1b[0m");
+    LOGGER.get().unwrap().update(|logger| {
+        *logger = UefiLoggerInner::Boxed(UartLogTarget::new(serial));
+    });
 }
