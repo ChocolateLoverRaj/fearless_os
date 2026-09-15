@@ -37,3 +37,9 @@ impl LogTarget for FrameBufferLogTarget {
         self.frame_buffer.flush();
     }
 }
+
+impl From<FrameBufferLogTarget> for FrameBufferEmbeddedGraphics<'static> {
+    fn from(value: FrameBufferLogTarget) -> Self {
+        value.frame_buffer
+    }
+}

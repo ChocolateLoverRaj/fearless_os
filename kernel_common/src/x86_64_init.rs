@@ -27,8 +27,10 @@ pub unsafe fn init(offset_map_virt_addr: u64, rsdp: usize) {
 
     if CONFIG.enter_acpi_mode {
         platform.enter_acpi_mode().unwrap();
-        log::debug!("Entered ACPI mode");
+        log::info!("Entered ACPI mode");
     }
+    let pending_events = platform.registers.pm1_event_registers.pending_events();
+    log::info!("Pending events: {pending_events:#X}");
 
     let fadt = platform.tables.find_table::<Fadt>().unwrap();
     let sci_interrupt = fadt.sci_interrupt;

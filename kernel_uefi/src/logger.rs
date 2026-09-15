@@ -77,10 +77,16 @@ pub fn switch_to_gop(frame_buffer: FrameBufferEmbeddedGraphics<'static>) {
     })
 }
 
-pub fn switch_to_serial(mut serial: Box<dyn Write + Send>) {
+pub fn switch_to_serial(
+    mut serial: Box<dyn Write + Send>,
+) -> Option<FrameBufferEmbeddedGraphics<'static>> {
     // Reset colors if there were colors before
     serial.write_str("\x1b[0m");
     LOGGER.get().unwrap().update(|logger| {
-        *logger = UefiLoggerInner::Boxed(UartLogTarget::new(serial));
-    });
+        let logger = core::mem::replace(logger, UefiLoggerInner::Boxed(UartLogTarget::new(serial)));
+        match logger {
+            UefiLoggerInner::UefiGop(f) => Some(f.into()),
+            _ => None,
+        }
+    })
 }

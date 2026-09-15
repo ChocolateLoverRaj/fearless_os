@@ -62,6 +62,8 @@
               busybox
               # for connecting to serial ports
               picocom
+              # for converting binary AML to human readable form
+              acpica-tools
             ];
           };
       }

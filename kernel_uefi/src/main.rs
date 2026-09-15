@@ -4,6 +4,7 @@
 extern crate alloc;
 use core::{ptr::NonNull, time::Duration};
 
+mod global_allocator;
 mod logger;
 mod memory;
 
@@ -23,7 +24,7 @@ use uefi::{
 };
 use x86_64::instructions::{hlt, interrupts::int3};
 
-use crate::memory::OFFSET_MAP_VIRT_ADDR;
+use crate::{global_allocator::GLOBAL_ALLOCATOR, memory::OFFSET_MAP_VIRT_ADDR};
 
 #[derive(Debug, Clone, Copy)]
 enum RsdpType {
@@ -84,7 +85,7 @@ fn main() -> Status {
         FrameBufferEmbeddedGraphics::new(
             NonNull::new(gop.frame_buffer().as_mut_ptr().cast()).unwrap(),
             (&gop.current_mode_info()).try_into().unwrap(),
-            BufferingMode::Direct,
+            BufferingMode::DoubleBuffer,
         )
     };
     logger::switch_to_gop(buffer);
@@ -113,6 +114,7 @@ fn main() -> Status {
 
     log::info!("Exiting boot services");
     logger().flush();
+    GLOBAL_ALLOCATOR.disable_uefi();
     after_exit_boot_services(unsafe { exit_boot_services(None) }, rsdp)
 }
 
@@ -129,6 +131,7 @@ fn after_exit_boot_services(mut memory_map: MemoryMapOwned, rsdp: usize) -> ! {
     unsafe { memory::init(memory_map) };
     log::debug!("Initialized memory");
     logger().flush();
+
     interrupts::init();
     log::debug!("Initialized interrupts");
     logger().flush();
@@ -138,8 +141,13 @@ fn after_exit_boot_services(mut memory_map: MemoryMapOwned, rsdp: usize) -> ! {
 
     if let Some(serial) = serial::init() {
         log::info!("Switching logging to serial");
-        logger::switch_to_serial(serial);
+        logger().flush();
+        let frame_buffer = logger::switch_to_serial(serial);
         log::info!("Switched logging to serial");
+        if let Some(frame_buffer) = frame_buffer {
+            // The frame buffer box was allocated by UEFI and so we can't free it
+            core::mem::forget(frame_buffer);
+        }
     }
 
     x86_64::instructions::interrupts::enable();

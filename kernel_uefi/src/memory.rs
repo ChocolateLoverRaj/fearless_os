@@ -2,7 +2,7 @@ use core::ops::Range;
 
 use force_send_sync::SendSync;
 use kernel_common::{
-    global_allocator::{KernelGlobalAllocator, new_global_allocator},
+    global_allocator::new_global_allocator,
     initial_pmm::InitialFreeMem,
     memory::{self},
     vmm::VirtMemRange,
@@ -12,6 +12,8 @@ use uefi::{
     boot::MemoryType,
     mem::memory_map::{MemoryMap, MemoryMapOwned},
 };
+
+use crate::global_allocator::GLOBAL_ALLOCATOR;
 
 pub const OFFSET_MAP_VIRT_ADDR: u64 = 0;
 pub const OFFSET_MAP_LEN: u64 = 0x400000000000;
@@ -77,8 +79,6 @@ pub unsafe fn init(memory: MemoryMapOwned) {
             None,
         )
     };
-}
 
-#[global_allocator]
-static GLOBAL_ALLOCATOR: KernelGlobalAllocator =
-    unsafe { new_global_allocator(OFFSET_MAP_VIRT_ADDR) };
+    GLOBAL_ALLOCATOR.switch_to_kernel(unsafe { new_global_allocator(OFFSET_MAP_VIRT_ADDR) });
+}
