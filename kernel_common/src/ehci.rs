@@ -3,11 +3,15 @@ use core::{ptr::NonNull, str::FromStr};
 use crate::{
     acpi_events::ACPI_GLOBALS,
     acpi_handler::{PCIE_MAPPINGS, SEGMENT_MAPPED_LEN},
+    apic,
     memory::{alloc_phys, map_phys},
     paging::LeafMappingFlags,
     pat::STRONG_UNCACHEABLE_INDEX,
 };
-use acpi::aml::{self, namespace::AmlName, pci_routing::PciRoutingTable};
+use acpi::aml::{
+    namespace::AmlName,
+    pci_routing::{PciRoutingTable, Pin},
+};
 use arbitrary_int::{traits::Integer, u3, u5};
 use ez_ehci::{
     AnyEhci, InitDeviceBuffer, InitDeviceError, MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS,
@@ -18,15 +22,13 @@ use log::logger;
 use x86_64::instructions::hlt;
 
 pub fn run() -> ! {
-    // let aml = aml::Interpreter::new_from_platform(&ACPI_GLOBALS.get().unwrap().platform).unwrap();
-    // aml.initialize_namespace();
     let aml = &ACPI_GLOBALS.get().unwrap().aml_interpreter;
     let pci_routing_table =
         PciRoutingTable::from_prt_path(AmlName::from_str(r#"\_SB.PCI0._PRT"#).unwrap(), &aml)
             .unwrap();
 
-    log::debug!("PCI Routing Table: {pci_routing_table:#X?}");
-    for (segment, data) in PCIE_MAPPINGS.lock().iter() {
+    log::debug!("Got PCI Routing Table");
+    for data in PCIE_MAPPINGS.get().unwrap().values() {
         let mapped_mem = NonNull::slice_from_raw_parts(
             NonNull::new(data.virt as *mut _).unwrap(),
             SEGMENT_MAPPED_LEN.try_into().unwrap(),
@@ -125,25 +127,25 @@ pub fn run() -> ! {
                             }
                         };
                         let mut function = pci_access.function;
-                        // log::info!("Getting IRQ descriptor");
-                        // let route = pci_routing_table.route(
-                        //     device_number.into(),
-                        //     function_number.value().into(),
-                        //     match interrupt_info.interrupt_pin {
-                        //         0x1 => Pin::IntA,
-                        //         0x2 => Pin::IntB,
-                        //         0x3 => Pin::IntC,
-                        //         0x4 => Pin::IntD,
-                        //         interrupt_pin => {
-                        //             panic!("unknown interrupt pin: {interrupt_pin}")
-                        //         }
-                        //     },
-                        //     &aml,
-                        // );
-                        // log::info!("got route: {route:?}");
-                        // let irq_descriptor = route.unwrap();
-                        // log::info!("eHCI irq descriptor: {irq_descriptor:#X?}");
-                        // apic::configure_ehci_interrupt(irq_descriptor);
+                        log::info!("Getting IRQ descriptor");
+                        let route = pci_routing_table.route(
+                            device_number.into(),
+                            function_number.value().into(),
+                            match interrupt_info.interrupt_pin {
+                                0x1 => Pin::IntA,
+                                0x2 => Pin::IntB,
+                                0x3 => Pin::IntC,
+                                0x4 => Pin::IntD,
+                                interrupt_pin => {
+                                    panic!("unknown interrupt pin: {interrupt_pin}")
+                                }
+                            },
+                            &aml,
+                        );
+                        log::info!("got route: {route:?}");
+                        let irq_descriptor = route.unwrap();
+                        log::info!("eHCI irq descriptor: {irq_descriptor:#X?}");
+                        apic::configure_ehci_interrupt(irq_descriptor);
 
                         let ehci_flags = LeafMappingFlags {
                             writable: true,

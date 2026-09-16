@@ -50,8 +50,6 @@ run_bios: $(BUILD_DIR)/disk.img
         -drive file=$(BUILD_DIR)/disk.img,format=raw,if=ide,snapshot=on \
         -device usb-ehci,id=ehci \
         -device usb-mouse,bus=ehci.0 \
-        -trace "usb_ehci_*" \
-        -d trace:pci_cfg_write \
         --nographic
 
 run_bios_with_graphic: $(BUILD_DIR)/disk.img

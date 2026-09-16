@@ -4,7 +4,7 @@ use acpi::{AcpiTables, Handler, PciAddress, sdt::mcfg::Mcfg};
 use alloc::collections::btree_map::BTreeMap;
 use arbitrary_int::{u3, u5, u12};
 use ez_pci::{PciAccess, PciReadWriteValue, PcieInfo};
-use spin::Mutex;
+use spin::{Mutex, Once};
 use x86_64::instructions::port::Port;
 
 use crate::{
@@ -20,7 +20,7 @@ pub struct PcieData {
     pub virt: u64,
 }
 
-pub static PCIE_MAPPINGS: Mutex<BTreeMap<u16, PcieData>> = Mutex::new(BTreeMap::new());
+pub static PCIE_MAPPINGS: Once<BTreeMap<u16, PcieData>> = Once::new();
 
 const ACPI_MAPPING_FLAGS: LeafMappingFlags = LeafMappingFlags {
     executable: false,
@@ -36,7 +36,7 @@ pub struct AcpiHandler {
 
 impl AcpiHandler {
     fn read_pci<T: PciReadWriteValue>(&self, address: PciAddress, offset: u16) -> T {
-        let mappings = PCIE_MAPPINGS.lock();
+        let mappings = PCIE_MAPPINGS.get().unwrap();
         let pcie_data = mappings.get(&address.segment()).unwrap();
         let mut pcie = unsafe {
             PciAccess::new_pcie(
@@ -56,7 +56,7 @@ impl AcpiHandler {
     }
 
     fn write_pci<T: PciReadWriteValue>(&self, address: PciAddress, offset: u16, value: T) {
-        let mappings = PCIE_MAPPINGS.lock();
+        let mappings = PCIE_MAPPINGS.get().unwrap();
         let pcie_data = mappings.get(&address.segment()).unwrap();
         let mut pcie = unsafe {
             PciAccess::new_pcie(
@@ -258,11 +258,12 @@ pub fn init(tables: &AcpiTables<AcpiHandler>) {
     let mcfg = tables.find_table::<Mcfg>().unwrap();
     log::debug!("MCFG: {:#X?}", mcfg.get());
 
+    let mut pcie_mappings = BTreeMap::new();
     for entry in mcfg.entries() {
         log::trace!("Mapping MCFG entry: {:#X?}", entry);
         let virt_addr =
             map_phys(entry.base_address, SEGMENT_MAPPED_LEN, ACPI_MAPPING_FLAGS).unwrap();
-        PCIE_MAPPINGS.lock().insert(
+        pcie_mappings.insert(
             entry.pci_segment_group,
             PcieData {
                 info: PcieInfo {
@@ -273,4 +274,5 @@ pub fn init(tables: &AcpiTables<AcpiHandler>) {
             },
         );
     }
+    PCIE_MAPPINGS.call_once(|| pcie_mappings);
 }

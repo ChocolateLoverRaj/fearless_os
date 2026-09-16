@@ -28,7 +28,7 @@ pub fn init() -> Option<Box<dyn Write + Send>> {
         }
     }
 
-    for data in PCIE_MAPPINGS.lock().values() {
+    for data in PCIE_MAPPINGS.get().unwrap().values() {
         let mapped_mem = NonNull::slice_from_raw_parts(
             NonNull::new(data.virt as *mut _).unwrap(),
             SEGMENT_MAPPED_LEN.try_into().unwrap(),
