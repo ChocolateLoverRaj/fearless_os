@@ -3,59 +3,99 @@ use core::{ptr::NonNull, str::FromStr};
 use crate::{
     acpi_events::ACPI_GLOBALS,
     acpi_handler::{PCIE_MAPPINGS, SEGMENT_MAPPED_LEN},
-    apic,
+    apic::{self, end_of_interrupt},
+    async_executor::execute_future,
+    hpet::HpetDelay,
     memory::{alloc_phys, map_phys},
     paging::LeafMappingFlags,
     pat::STRONG_UNCACHEABLE_INDEX,
 };
 use acpi::aml::{
+    InterruptModelUsed,
     namespace::AmlName,
+    object::{Object, WrappedObject},
     pci_routing::{PciRoutingTable, Pin},
 };
+use alloc::vec;
 use arbitrary_int::{traits::Integer, u3, u5};
 use ez_ehci::{
-    AnyEhci, InitDeviceBuffer, InitDeviceError, MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS,
-    PeriodicFrameList, RunOutput, TryTakeOutput, new_ehci,
+    AnyEhci, InitDeviceBuffer, InitDeviceError, InitializedEhci, MappedMem, PCI_CLASS, PCI_PROG_IF,
+    PCI_SUBCLASS, PeriodicFrameList, RunOutput, TryTakeOutput, new_ehci,
 };
 use ez_pci::{BarWithSize, MemoryBarAddrAndSizeU64, PciAccess, PciFunction};
 use log::logger;
-use x86_64::instructions::hlt;
+use spin::Once;
+use x86_64::structures::idt::InterruptStackFrame;
 
-pub fn run() -> ! {
+struct EhciInfo {
+    ehci: InitializedEhci,
+    segment: u16,
+    bus: u8,
+    device: u5,
+    function: u3,
+}
+
+static EHCI: Once<EhciInfo> = Once::new();
+
+pub fn run() {
     let aml = &ACPI_GLOBALS.get().unwrap().aml_interpreter;
+    aml.set_interrupt_model_used(InterruptModelUsed::ApicMode)
+        .unwrap();
     let pci_routing_table =
         PciRoutingTable::from_prt_path(AmlName::from_str(r#"\_SB.PCI0._PRT"#).unwrap(), &aml)
             .unwrap();
 
     log::debug!("Got PCI Routing Table");
-    for data in PCIE_MAPPINGS.get().unwrap().values() {
+    let ehci_flags = LeafMappingFlags {
+        writable: true,
+        executable: false,
+        user_mode_accessible: false,
+        pat_index: STRONG_UNCACHEABLE_INDEX,
+    };
+    for (segment, data) in PCIE_MAPPINGS.get().unwrap() {
         let mapped_mem = NonNull::slice_from_raw_parts(
             NonNull::new(data.virt as *mut _).unwrap(),
             SEGMENT_MAPPED_LEN.try_into().unwrap(),
         );
         let mut pci = unsafe { PciAccess::new_pcie(data.info, mapped_mem) };
-        for bus in pci.known_buses() {
-            let mut bus = pci.bus(bus);
+        for bus_number in pci.known_buses() {
+            let mut bus = pci.bus(bus_number);
             for device_number in u5::ZERO.value()..=u5::MAX.value() {
-                let Some(mut device) = bus.device(u5::new(device_number)) else {
+                let device_number = u5::new(device_number);
+                let Some(mut device) = bus.device(device_number) else {
                     continue;
                 };
                 let possible_functions = device.possible_functions();
                 for function_number in
                     possible_functions.start().value()..=possible_functions.end().value()
                 {
-                    let Some(mut function) = device.function(u3::new(function_number)) else {
+                    let function_number = u3::new(function_number);
+                    let Some(mut function) = device.function(function_number) else {
                         continue;
                     };
                     if function.class_code() == PCI_CLASS
                         && function.sub_class() == PCI_SUBCLASS
                         && function.prog_if() == PCI_PROG_IF
                     {
-                        log::info!("Found eHCI PCI device");
+                        log::info!(
+                            "Found eHCI PCI device at bus {bus_number:x} device {device_number:x} function {function_number:x}"
+                        );
                         let interrupt_info = function.interrupt_info().unwrap();
                         log::info!("interrupt info: {interrupt_info:#X?}");
                         let bar = function.read_bar_with_size(0).unwrap().unwrap();
                         log::info!("bar: {bar:#X?}");
+                        log::info!("Getting IRQ descriptor");
+                        let route = pci_routing_table.route(
+                            device_number.into(),
+                            function_number.value().into(),
+                            Pin::from_pci_interrupt_pin(interrupt_info.interrupt_pin)
+                                .unwrap()
+                                .unwrap(),
+                            &aml,
+                        );
+                        log::info!("got route: {route:?}");
+                        let irq_descriptor = route.unwrap();
+                        log::info!("eHCI irq descriptor: {irq_descriptor:#X?}");
 
                         let command = function
                             .command()
@@ -127,32 +167,9 @@ pub fn run() -> ! {
                             }
                         };
                         let mut function = pci_access.function;
-                        log::info!("Getting IRQ descriptor");
-                        let route = pci_routing_table.route(
-                            device_number.into(),
-                            function_number.value().into(),
-                            match interrupt_info.interrupt_pin {
-                                0x1 => Pin::IntA,
-                                0x2 => Pin::IntB,
-                                0x3 => Pin::IntC,
-                                0x4 => Pin::IntD,
-                                interrupt_pin => {
-                                    panic!("unknown interrupt pin: {interrupt_pin}")
-                                }
-                            },
-                            &aml,
-                        );
-                        log::info!("got route: {route:?}");
-                        let irq_descriptor = route.unwrap();
-                        log::info!("eHCI irq descriptor: {irq_descriptor:#X?}");
+
                         apic::configure_ehci_interrupt(irq_descriptor);
 
-                        let ehci_flags = LeafMappingFlags {
-                            writable: true,
-                            executable: false,
-                            user_mode_accessible: false,
-                            pat_index: STRONG_UNCACHEABLE_INDEX,
-                        };
                         let mem = alloc_phys(
                             size_of::<PeriodicFrameList>().try_into().unwrap(),
                             align_of::<PeriodicFrameList>().try_into().unwrap(),
@@ -167,68 +184,96 @@ pub fn run() -> ! {
                             .unwrap() as *mut _,
                         )
                         .unwrap();
-                        let mut ehci = ehci.init(MappedMem {
+                        let ehci = ehci.init(MappedMem {
                             phys_addr: mem.try_into().unwrap(),
                             ptr: ptr,
                         });
                         log::info!("eHCI initialized");
-                        logger().flush();
-                        // x86_64::instructions::interrupts::enable();
-                        loop {
-                            log::info!("running eHCI");
-                            let device = loop {
-                                match ehci.run() {
-                                    RunOutput::Idle => {
-                                        log::info!("idling (halting with interrupt enabled).");
-                                        loop {
-                                            hlt();
-                                        }
-                                    }
-                                    RunOutput::NewDevice(device) => break device,
-                                };
-                            };
-                            log::info!("New device: {device:?}");
-                            let mem = alloc_phys(
-                                size_of::<InitDeviceBuffer>().try_into().unwrap(),
-                                align_of::<InitDeviceBuffer>().try_into().unwrap(),
-                            )
-                            .unwrap();
-                            let ptr = NonNull::new(
-                                map_phys(
-                                    mem,
-                                    size_of::<InitDeviceBuffer>().try_into().unwrap(),
-                                    ehci_flags,
-                                )
-                                .unwrap() as *mut _,
-                            )
-                            .unwrap();
-                            let command = function.command();
-                            let pci_status = function.status();
-                            log::info!("{command:#X?} {pci_status:#X?}");
-                            match ehci.init_device(
-                                device.port,
-                                MappedMem {
-                                    phys_addr: mem.try_into().unwrap(),
-                                    ptr,
-                                },
-                            ) {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    if let InitDeviceError::HostSystemError = e {
-                                        let command = function.command();
-                                        let pci_status = function.status();
-                                        log::info!("{command:#X?} {pci_status:#X?}");
-                                    }
-                                    panic!("{e:?}")
-                                }
-                            };
-                        }
+                        EHCI.call_once(|| EhciInfo {
+                            ehci,
+                            segment: *segment,
+                            bus: bus_number,
+                            device: device_number,
+                            function: function_number,
+                        });
                     }
                 }
             }
         }
     }
-    loop {
-        hlt();
+
+    if let Some(ehci) = EHCI.get() {
+        let ehci = &ehci.ehci;
+        execute_future(async {
+            logger().flush();
+            loop {
+                log::info!("running eHCI");
+                let device = loop {
+                    match ehci.run() {
+                        RunOutput::Idle => {
+                            // log::info!("idling (halting with interrupt enabled).");
+                            // loop {
+                            //     hlt();
+                            // }
+                        }
+                        RunOutput::NewDevice(device) => break device,
+                    };
+                };
+                log::info!("New device: {device:?}");
+                let mem = alloc_phys(
+                    size_of::<InitDeviceBuffer>().try_into().unwrap(),
+                    align_of::<InitDeviceBuffer>().try_into().unwrap(),
+                )
+                .unwrap();
+                let ptr = NonNull::new(
+                    map_phys(
+                        mem,
+                        size_of::<InitDeviceBuffer>().try_into().unwrap(),
+                        ehci_flags,
+                    )
+                    .unwrap() as *mut _,
+                )
+                .unwrap();
+                match ehci
+                    .init_device(
+                        device.port,
+                        MappedMem {
+                            phys_addr: mem.try_into().unwrap(),
+                            ptr,
+                        },
+                        &mut HpetDelay,
+                    )
+                    .await
+                {
+                    Ok(_) => {}
+                    Err(e) => {
+                        panic!("{e:?}")
+                    }
+                };
+            }
+        });
     }
+}
+
+pub extern "x86-interrupt" fn ehci_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    if let Some(ehci) = EHCI.get() {
+        let data = PCIE_MAPPINGS.get().unwrap().get(&ehci.segment).unwrap();
+        let mapped_mem = NonNull::slice_from_raw_parts(
+            NonNull::new(data.virt as *mut _).unwrap(),
+            SEGMENT_MAPPED_LEN.try_into().unwrap(),
+        );
+        let mut pci = unsafe { PciAccess::new_pcie(data.info, mapped_mem) };
+        let interrupt_status = pci
+            .bus(ehci.bus)
+            .device(ehci.device)
+            .unwrap()
+            .function(ehci.function)
+            .unwrap()
+            .status()
+            .interrupt_status();
+        if interrupt_status {
+            ehci.ehci.handle_interrupt();
+        }
+    }
+    unsafe { end_of_interrupt() };
 }

@@ -27,6 +27,10 @@ impl<T> Logger<T> {
     pub fn update<R, F: FnOnce(&mut T) -> R>(&self, f: F) -> R {
         without_interrupts(|| f(&mut *self.data.lock()))
     }
+
+    pub unsafe fn force_unlock(&self) {
+        unsafe { self.data.force_unlock() };
+    }
 }
 
 impl<T: LoggerInner + Send> Log for Logger<T> {

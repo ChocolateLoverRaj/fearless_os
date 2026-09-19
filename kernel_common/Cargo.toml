@@ -7,6 +7,7 @@ edition.workspace = true
 acpi = { workspace = true, optional = true, features = ["aml"] }
 arbitrary-int = { workspace = true }
 bitbybit = { workspace = true }
+embedded-hal-async = { workspace = true }
 ez_ehci = { workspace = true }
 ez_hpet = { workspace = true }
 ez_pci = { workspace = true }

@@ -149,11 +149,17 @@ unsafe extern "C" fn rust_start(info: &BigStageEntryInfo) -> ! {
 
     unsafe { x86_64_init::init(OFFSET_MAP_VIRT_ADDR, rsdp.physical_start) };
 
-    ehci::run()
+    ehci::run();
+
+    loop {
+        hlt();
+    }
 }
 
 #[panic_handler]
 fn panic_handler(panic_info: &PanicInfo) -> ! {
+    x86_64::instructions::interrupts::disable();
+    unsafe { logger::force_unlock() };
     log::error!("{panic_info}");
     logger().flush();
     loop {

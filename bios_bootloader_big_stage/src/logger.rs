@@ -68,3 +68,7 @@ pub fn init_frame_buffer(
         }
     })
 }
+
+pub unsafe fn force_unlock() {
+    unsafe { LOGGER.get().unwrap().force_unlock() };
+}

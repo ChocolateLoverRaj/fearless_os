@@ -71,7 +71,7 @@ pub const CONFIG: Config = Config {
     serial_log_level: LevelFilter::Debug,
     prefer_screen_logging: false,
     font: mono_font::iso_8859_16::FONT_6X13,
-    screen_flush: ScreenFlush::Manually,
+    screen_flush: ScreenFlush::EveryLog,
     enter_acpi_mode: false,
     hpet_prefer_legacy_replacement: false,
 };

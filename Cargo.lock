@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "acpi"
 version = "6.1.1"
-source = "git+https://github.com/ChocolateLoverRaj/acpi?branch=fearless_os#9921c32bd682ad9d9267efa556dbacd03cfe1921"
+source = "git+https://github.com/ChocolateLoverRaj/acpi?branch=fearless_os#428ba237ffb1d7b7615f525b69cce5466010e71e"
 dependencies = [
  "bit_field",
  "bitflags 2.13.1",
@@ -428,6 +428,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-hal"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "361a90feb7004eca4019fb28352a9465666b24f840f5c3cddf0ff13920590b89"
+
+[[package]]
+name = "embedded-hal-async"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c4c685bbef7fe13c3c6dd4da26841ed3980ef33e841cddfa15ce8a8fb3f1884"
+dependencies = [
+ "embedded-hal",
+]
+
+[[package]]
 name = "embedded-io"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -449,9 +464,12 @@ dependencies = [
  "arbitrary-int",
  "bitbybit",
  "debug-ignore",
+ "embedded-hal-async",
+ "futures",
  "log",
  "num_enum",
  "volatile 0.6.1",
+ "zerocopy",
 ]
 
 [[package]]
@@ -754,6 +772,7 @@ dependencies = [
  "arbitrary-int",
  "bitbybit",
  "embedded-graphics",
+ "embedded-hal-async",
  "ez_ehci",
  "ez_hpet",
  "ez_pci",
@@ -1511,18 +1530,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.56"
+version = "0.8.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "556764e583adb45a9f8d413c2a147fa7e8d821e48e12b14fd560b607998b75eb"
+checksum = "d35102a9f36d089ccae9e4c6802bc118be4487b80aaffc0ab4e0cf5ce92d2873"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.56"
+version = "0.8.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2ab42fc20575779bd240faa45f94a74256f755c0fa9e89f0ede20d91d0cdfc1"
+checksum = "146c01f5ab44258da43cf276c74a2763db2ff3969c9c652c3f2de07041d0b2bc"
 dependencies = [
  "proc-macro2",
  "quote",

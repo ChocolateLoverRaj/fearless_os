@@ -16,12 +16,14 @@ edition = "2024"
 
 [workspace.dependencies]
 acpi = { git = "https://github.com/ChocolateLoverRaj/acpi", branch = "fearless_os", default-features = false }
+# acpi = { path = "../acpi" }
 arbitrary-int = { version = "2.1.1", default-features = false }
 bios_bootloader_common = { path = "bios_bootloader_common", default-features = false }
 bitbybit = { version = "2.0.1", default-features = false }
 clap = { version = "4.6.6", default-features = false }
 elf = { version = "0.8.0", default-features = false }
 embedded-graphics = { version = "0.8.2", default-features = false }
+embedded-hal-async = { version = "1.0.0", default-features = false }
 ez_ehci = { path = "../ez_ehci", default-features = false }
 ez_hpet = { path = "../ez_hpet", default-features = false }
 ez_pci = { path = "../ez_pci", default-features = false }

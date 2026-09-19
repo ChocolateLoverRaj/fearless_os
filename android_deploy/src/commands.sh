@@ -1,3 +1,5 @@
+set -x
+
 GADGET_ROOT=$(find /config/usb_gadget/ -mindepth 1 -maxdepth 1 -type d | head -n 1)
 CONFIG_ROOT=$(find "$GADGET_ROOT/configs/" -mindepth 1 -maxdepth 1 -type d | head -n 1)
 UDC_NAME=$(cat "$GADGET_ROOT/UDC")

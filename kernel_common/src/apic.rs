@@ -104,7 +104,7 @@ fn configure_interrupt(
             }
         })
         .unwrap();
-    log::debug!(
+    log::info!(
         "routing I/O irq {io_irq:#X} to LAPIC irq {lapic_irq:#X} through I/O apic {:#X} entry {:#X}",
         unsafe { io_apic.id() },
         entry_within,

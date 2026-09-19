@@ -7,17 +7,21 @@ use core::{
     time::Duration,
 };
 
-use crate::{memory::map_phys, paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
+use crate::{
+    apic::end_of_interrupt, memory::map_phys, paging::LeafMappingFlags,
+    pat::STRONG_UNCACHEABLE_INDEX,
+};
 use acpi::{AcpiTables, HpetInfo};
 use alloc::{collections::binary_heap::BinaryHeap, sync::Arc};
 use arbitrary_int::u5;
+use embedded_hal_async::delay::DelayNs;
 use ez_hpet::{
     ApicDestMode, DeliveryMode, Hpet, HpetMemory, InterruptConfig, InterruptTrigger,
     LEGACY_REPLACEMENT_ROUTES, RedirectionHint, TimerMode,
 };
 use futures::task::AtomicWaker;
 use spin::{Mutex, Once};
-use x86_64::instructions::interrupts::without_interrupts;
+use x86_64::{instructions::interrupts::without_interrupts, structures::idt::InterruptStackFrame};
 
 use crate::{acpi_handler::AcpiHandler, apic, config::CONFIG, interrupts::IrqAssignments};
 
@@ -142,7 +146,6 @@ fn process_timers(timers: &mut BinaryHeap<Reverse<Arc<Timer>>>) {
     loop {
         if let Some(Reverse(virtual_timer)) = timers.peek() {
             if hpet.main_counter_value() >= virtual_timer.target_counter_value {
-                log::trace!("timer completed, setting as completed and calling waker");
                 virtual_timer.timer_completed.store(true, Ordering::Relaxed);
                 virtual_timer.waker.wake();
                 timers.pop();
@@ -165,8 +168,7 @@ fn process_timers(timers: &mut BinaryHeap<Reverse<Arc<Timer>>>) {
 }
 
 /// Interrupts must be disabled when calling this
-pub fn handle_irq() {
-    log::trace!("handling HPET irq");
+fn handle_irq() {
     // Currently only single core
     process_timers(&mut TIMER_LIST.try_lock().unwrap());
 }
@@ -186,7 +188,7 @@ pub fn sleep(duration: Duration) -> TimerFuture {
         timer_completed: AtomicBool::new(false),
     });
     without_interrupts(|| {
-        let mut timer_list = TIMER_LIST.lock();
+        let mut timer_list = TIMER_LIST.try_lock().unwrap();
         timer_list.push(Reverse(timer.clone()));
         process_timers(&mut timer_list);
     });
@@ -202,7 +204,6 @@ impl Future for TimerFuture {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        log::trace!("poll called for HPET timer future");
         self.timer.waker.register(cx.waker());
         if self.timer.timer_completed.load(Ordering::Relaxed) {
             Poll::Ready(())
@@ -215,9 +216,23 @@ impl Future for TimerFuture {
 impl Drop for TimerFuture {
     fn drop(&mut self) {
         without_interrupts(|| {
-            let mut timer_list = TIMER_LIST.lock();
+            let mut timer_list = TIMER_LIST.try_lock().unwrap();
             timer_list.retain(|virtual_timer| !Arc::ptr_eq(&virtual_timer.0, &self.timer));
             process_timers(&mut timer_list);
         })
     }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct HpetDelay;
+
+impl DelayNs for HpetDelay {
+    async fn delay_ns(&mut self, ns: u32) {
+        sleep(Duration::from_nanos(ns.into())).await;
+    }
+}
+
+pub extern "x86-interrupt" fn hpet_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    handle_irq();
+    unsafe { end_of_interrupt() };
 }

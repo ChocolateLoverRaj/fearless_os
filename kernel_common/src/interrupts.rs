@@ -24,7 +24,8 @@ use x86_64::{
 use crate::{
     acpi_events::{self, ACPI_GLOBALS, platform},
     apic::end_of_interrupt,
-    hpet,
+    ehci::ehci_interrupt_handler,
+    hpet::hpet_interrupt_handler,
 };
 
 pub struct Gdt {
@@ -106,18 +107,6 @@ extern "x86-interrupt" fn sci_interrupt_handler(_stack_frame: InterruptStackFram
     unsafe { end_of_interrupt() };
 }
 
-extern "x86-interrupt" fn ehci_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    log::info!("eHCI interrupt!");
-    logger().flush();
-    unsafe { end_of_interrupt() };
-}
-
-extern "x86-interrupt" fn hpet_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    hpet::handle_irq();
-    logger().flush();
-    unsafe { end_of_interrupt() };
-}
-
 pub fn init() {
     let tss = TSS.call_once(TaskStateSegment::new);
     let gdt = GDT.call_once(|| {
@@ -145,7 +134,6 @@ pub fn init() {
         idt[IrqAssignments::Sci as u8].set_handler_fn(sci_interrupt_handler);
         idt[IrqAssignments::Ehci as u8].set_handler_fn(ehci_interrupt_handler);
         idt[IrqAssignments::Hpet as u8].set_handler_fn(hpet_interrupt_handler);
-
         idt
     });
     idt.load();

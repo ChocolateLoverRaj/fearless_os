@@ -35,21 +35,29 @@ fn main() {
 
     // Run the following on the target
     println!("Configuring CONFIGFS");
-    let mut child = Command::new("ssh")
+    let mut command = Command::new("ssh");
+    command
         .arg(format!("{ssh_user}@{ssh_addr}"))
         .arg("-p")
         .arg(ssh_port.to_string())
         .arg("su -")
-        .stdin(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child
-        .stdin
-        .as_mut()
-        .unwrap()
-        .write_all(include_str!("commands.sh").as_bytes())
-        .unwrap();
-    if !child.wait().unwrap().success() {
-        panic!("Failed to run commands on android device");
+        .stdin(Stdio::piped());
+    let mut attempt = 0;
+    loop {
+        if attempt == 10 {
+            panic!("Failed to configure CONFIGFS");
+        }
+        let mut child = command.spawn().unwrap();
+        child
+            .stdin
+            .as_mut()
+            .unwrap()
+            .write_all(include_str!("commands.sh").as_bytes())
+            .unwrap();
+        if child.wait().unwrap().success() {
+            break;
+        }
+        eprintln!("[attempt {attempt}] Failed to configure CONFIGFS, retrying...");
+        attempt += 1;
     }
 }
