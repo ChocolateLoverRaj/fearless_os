@@ -13,14 +13,12 @@ use crate::{
 use acpi::aml::{
     InterruptModelUsed,
     namespace::AmlName,
-    object::{Object, WrappedObject},
     pci_routing::{PciRoutingTable, Pin},
 };
-use alloc::vec;
 use arbitrary_int::{traits::Integer, u3, u5};
 use ez_ehci::{
-    AnyEhci, InitDeviceBuffer, InitDeviceError, InitializedEhci, MappedMem, PCI_CLASS, PCI_PROG_IF,
-    PCI_SUBCLASS, PeriodicFrameList, RunOutput, TryTakeOutput, new_ehci,
+    AnyEhci, InitDeviceBuffer, InitializedEhci, MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS,
+    PeriodicFrameList, TryTakeOutput, new_ehci,
 };
 use ez_pci::{BarWithSize, MemoryBarAddrAndSizeU64, PciAccess, PciFunction};
 use log::logger;
@@ -170,14 +168,28 @@ pub fn run() {
 
                         apic::configure_ehci_interrupt(irq_descriptor);
 
-                        let mem = alloc_phys(
+                        let mem_0 = alloc_phys(
                             size_of::<PeriodicFrameList>().try_into().unwrap(),
                             align_of::<PeriodicFrameList>().try_into().unwrap(),
                         )
                         .unwrap();
-                        let ptr = NonNull::new(
+                        let ptr_0 = NonNull::new(
                             map_phys(
-                                mem,
+                                mem_0,
+                                size_of::<PeriodicFrameList>().try_into().unwrap(),
+                                ehci_flags,
+                            )
+                            .unwrap() as *mut _,
+                        )
+                        .unwrap();
+                        let mem_1 = alloc_phys(
+                            size_of::<QueueHead>().try_into().unwrap(),
+                            align_of::<QueueHead>().try_into().unwrap(),
+                        )
+                        .unwrap();
+                        let ptr_1 = NonNull::new(
+                            map_phys(
+                                mem_1,
                                 size_of::<PeriodicFrameList>().try_into().unwrap(),
                                 ehci_flags,
                             )
@@ -185,8 +197,8 @@ pub fn run() {
                         )
                         .unwrap();
                         let ehci = ehci.init(MappedMem {
-                            phys_addr: mem.try_into().unwrap(),
-                            ptr: ptr,
+                            phys_addr: mem_0.try_into().unwrap(),
+                            ptr: ptr_0,
                         });
                         log::info!("eHCI initialized");
                         EHCI.call_once(|| EhciInfo {
@@ -208,17 +220,7 @@ pub fn run() {
             logger().flush();
             loop {
                 log::info!("running eHCI");
-                let device = loop {
-                    match ehci.run() {
-                        RunOutput::Idle => {
-                            // log::info!("idling (halting with interrupt enabled).");
-                            // loop {
-                            //     hlt();
-                            // }
-                        }
-                        RunOutput::NewDevice(device) => break device,
-                    };
-                };
+                let device = ehci.run().await;
                 log::info!("New device: {device:?}");
                 let mem = alloc_phys(
                     size_of::<InitDeviceBuffer>().try_into().unwrap(),
@@ -271,8 +273,12 @@ pub extern "x86-interrupt" fn ehci_interrupt_handler(_stack_frame: InterruptStac
             .unwrap()
             .status()
             .interrupt_status();
+        // On Lenovo Ideapad Z560, this IRQ is called even when the PCI status has no interrupt.
+        // This seems to be a hardware bug and we ignore these extra IRQs.
         if interrupt_status {
             ehci.ehci.handle_interrupt();
+        } else {
+            // log::warn!("received eHCI interrupt when PCI status indicates no interrupt");
         }
     }
     unsafe { end_of_interrupt() };

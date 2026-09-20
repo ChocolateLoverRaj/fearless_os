@@ -47,3 +47,8 @@ Handling ACPI events, particularly power button press.
 ## The name
 - Fearless inspired by the song [Fearless on NCS](https://ncs.io/fearless2)
 - One of the main goals is to be able to run untrusted programs without worrying that they will spy on you or mess up your system or files
+
+## QEMU commands
+```
+device_add usb-mouse
+```

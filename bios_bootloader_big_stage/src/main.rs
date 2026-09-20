@@ -17,39 +17,14 @@ use core::{
     num::NonZero,
     panic::PanicInfo,
     ptr::NonNull,
-    str::FromStr,
     sync::atomic::{AtomicU16, Ordering},
-    time::Duration,
 };
 
-use acpi::{
-    AcpiTables, HpetInfo,
-    aml::{
-        self,
-        namespace::AmlName,
-        pci_routing::{PciRoutingTable, Pin},
-    },
-    platform::AcpiPlatform,
-    rsdp::Rsdp,
-    sdt::{fadt::Fadt, mcfg::Mcfg},
-};
-use alloc::vec;
-use arbitrary_int::{traits::Integer, u3, u5};
+use acpi::rsdp::Rsdp;
 use bios_bootloader_common::{
     OFFSET_MAP_VIRT_ADDR, big_stage_api::BigStageEntryInfo, bios::BiosFns,
 };
-use ez_ehci::{
-    AnyEhci, InitDeviceBuffer, MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS, PeriodicFrameList,
-    RunOutput, TryTakeOutput, new_ehci,
-};
-use ez_pci::{BarWithSize, MemoryBarAddrAndSizeU64, PciAccess, PciFunction};
-use kernel_common::{
-    acpi_events,
-    acpi_handler::{self, AcpiHandler},
-    apic,
-    config::CONFIG,
-    ehci, hpet, interrupts, x86_64_init,
-};
+use kernel_common::{acpi_handler::AcpiHandler, ehci, interrupts, x86_64_init};
 use log::logger;
 use spin::Once;
 use uart_16550::Uart16550Tty;
