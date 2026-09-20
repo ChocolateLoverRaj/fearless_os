@@ -18,7 +18,7 @@ use acpi::aml::{
 use arbitrary_int::{traits::Integer, u3, u5};
 use ez_ehci::{
     AnyEhci, InitDeviceBuffer, InitializedEhci, MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS,
-    PeriodicFrameList, TryTakeOutput, new_ehci,
+    PeriodicFrameList, QueueHead, TryTakeOutput, new_ehci,
 };
 use ez_pci::{BarWithSize, MemoryBarAddrAndSizeU64, PciAccess, PciFunction};
 use log::logger;
@@ -190,16 +190,22 @@ pub fn run() {
                         let ptr_1 = NonNull::new(
                             map_phys(
                                 mem_1,
-                                size_of::<PeriodicFrameList>().try_into().unwrap(),
+                                size_of::<QueueHead>().try_into().unwrap(),
                                 ehci_flags,
                             )
                             .unwrap() as *mut _,
                         )
                         .unwrap();
-                        let ehci = ehci.init(MappedMem {
-                            phys_addr: mem_0.try_into().unwrap(),
-                            ptr: ptr_0,
-                        });
+                        let ehci = ehci.init(
+                            MappedMem {
+                                phys_addr: mem_0.try_into().unwrap(),
+                                ptr: ptr_0,
+                            },
+                            MappedMem {
+                                phys_addr: mem_1.try_into().unwrap(),
+                                ptr: ptr_1,
+                            },
+                        );
                         log::info!("eHCI initialized");
                         EHCI.call_once(|| EhciInfo {
                             ehci,

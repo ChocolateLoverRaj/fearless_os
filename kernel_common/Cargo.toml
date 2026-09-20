@@ -8,7 +8,7 @@ acpi = { workspace = true, optional = true, features = ["aml"] }
 arbitrary-int = { workspace = true }
 bitbybit = { workspace = true }
 embedded-hal-async = { workspace = true }
-ez_ehci = { workspace = true }
+ez_ehci = { workspace = true, optional = true }
 ez_hpet = { workspace = true }
 ez_pci = { workspace = true }
 force-send-sync = { workspace = true }
@@ -29,4 +29,4 @@ zerocopy = { workspace = true }
 x2apic = { workspace = true }
 
 [features]
-alloc = ["dep:talc", "dep:acpi"]
+alloc = ["dep:talc", "dep:acpi", "dep:ez_ehci"]
