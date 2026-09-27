@@ -10,13 +10,13 @@ use acpi::{
 };
 use alloc::vec;
 use log::logger;
-use spin::Once;
+use spin::{Mutex, Once};
 use x86_64::{
     instructions::tables::load_tss,
     registers::segmentation::{CS, SS, Segment},
     structures::{
         gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector},
-        idt::{InterruptDescriptorTable, InterruptStackFrame},
+        idt::{HandlerFuncType, InterruptDescriptorTable, InterruptStackFrame},
         tss::TaskStateSegment,
     },
 };
@@ -24,8 +24,6 @@ use x86_64::{
 use crate::{
     acpi_events::{self, ACPI_GLOBALS, platform},
     apic::end_of_interrupt,
-    ehci::ehci_interrupt_handler,
-    hpet::hpet_interrupt_handler,
 };
 
 pub struct Gdt {
@@ -35,7 +33,15 @@ pub struct Gdt {
     tss_selector: SegmentSelector,
 }
 
-static IDT: Once<InterruptDescriptorTable> = Once::new();
+struct IdtInfo {
+    idt: InterruptDescriptorTable,
+    irqs_assigned: u8,
+}
+
+static IDT: Mutex<IdtInfo> = Mutex::new(IdtInfo {
+    idt: InterruptDescriptorTable::new(),
+    irqs_assigned: 0,
+});
 static TSS: Once<TaskStateSegment> = Once::new();
 static GDT: Once<Gdt> = Once::new();
 
@@ -46,8 +52,6 @@ pub enum IrqAssignments {
     LapicSpurious,
     LapicTimer,
     Sci,
-    Ehci,
-    Hpet,
 }
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
@@ -127,14 +131,23 @@ pub fn init() {
     unsafe { CS::set_reg(gdt.kernel_code_selector) };
     unsafe { SS::set_reg(gdt.kernel_data_selector) };
     unsafe { load_tss(gdt.tss_selector) };
-    let idt = IDT.call_once(|| {
-        let mut idt = InterruptDescriptorTable::new();
-        idt.breakpoint.set_handler_fn(breakpoint_handler);
-        idt[IrqAssignments::LapicTimer as u8].set_handler_fn(timer_interrupt_handler);
-        idt[IrqAssignments::Sci as u8].set_handler_fn(sci_interrupt_handler);
-        idt[IrqAssignments::Ehci as u8].set_handler_fn(ehci_interrupt_handler);
-        idt[IrqAssignments::Hpet as u8].set_handler_fn(hpet_interrupt_handler);
-        idt
-    });
-    idt.load();
+    let mut idt = IDT.lock();
+    idt.idt.breakpoint.set_handler_fn(breakpoint_handler);
+    idt.idt[IrqAssignments::LapicTimer as u8].set_handler_fn(timer_interrupt_handler);
+    idt.idt[IrqAssignments::Sci as u8].set_handler_fn(sci_interrupt_handler);
+    idt.irqs_assigned = IrqAssignments::Sci as u8;
+    // idt[IrqAssignments::Ehci as u8].set_handler_fn(ehci_interrupt_handler);
+    // idt[IrqAssignments::Hpet as u8].set_handler_fn(hpet_interrupt_handler);
+    unsafe { idt.idt.load_unsafe() };
+}
+
+pub fn assign_irq(f: extern "x86-interrupt" fn(InterruptStackFrame)) -> u8 {
+    let mut idt = IDT.lock();
+    let irq = idt
+        .irqs_assigned
+        .checked_add(1)
+        .expect("out of IRQ numbers");
+    idt.idt[irq].set_handler_fn(f);
+    idt.irqs_assigned += 1;
+    irq
 }

@@ -6,6 +6,7 @@ use crate::{
     apic::{self, end_of_interrupt},
     async_executor::execute_future,
     hpet::HpetDelay,
+    interrupts::assign_irq,
     memory::{alloc_phys, map_phys},
     paging::LeafMappingFlags,
     pat::STRONG_UNCACHEABLE_INDEX,
@@ -17,8 +18,8 @@ use acpi::aml::{
 };
 use arbitrary_int::{traits::Integer, u3, u5};
 use ez_ehci::{
-    AnyEhci, EhciParts, InitDeviceBuffer, InitializedEhci, MappedMem, PCI_CLASS, PCI_PROG_IF,
-    PCI_SUBCLASS, PeriodicFrameList, QueueHead, TryTakeOutput, new_ehci,
+    AnyEhci, EhciParts, InitDeviceBuffer, MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS,
+    PeriodicFrameList, QueueHead, TryTakeOutput, new_ehci,
 };
 use ez_pci::{BarWithSize, MemoryBarAddrAndSizeU64, PciAccess, PciFunction};
 use log::logger;
@@ -166,9 +167,14 @@ pub fn run() {
                                 ehci
                             }
                         };
-                        let mut function = pci_access.function;
 
-                        apic::configure_ehci_interrupt(irq_descriptor);
+                        let hpet_irq = assign_irq(ehci_interrupt_handler);
+                        apic::configure_interrupt(
+                            irq_descriptor.irqs[0],
+                            hpet_irq,
+                            irq_descriptor.trigger,
+                            irq_descriptor.polarity,
+                        );
 
                         let mem_0 = alloc_phys(
                             size_of::<PeriodicFrameList>().try_into().unwrap(),

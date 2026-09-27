@@ -1,4 +1,7 @@
-use crate::{memory::map_phys, paging::LeafMappingFlags, pat::STRONG_UNCACHEABLE_INDEX};
+use crate::{
+    interrupts::assign_irq, memory::map_phys, paging::LeafMappingFlags,
+    pat::STRONG_UNCACHEABLE_INDEX,
+};
 use acpi::{
     aml::resource::{InterruptPolarity, InterruptTrigger, IrqDescriptor},
     platform::{AcpiPlatform, InterruptModel},
@@ -86,7 +89,7 @@ pub unsafe fn end_of_interrupt() {
     unsafe { local_apic.end_of_interrupt() };
 }
 
-fn configure_interrupt(
+pub fn configure_interrupt(
     io_irq: u32,
     lapic_irq: u8,
     trigger: InterruptTrigger,
@@ -125,22 +128,22 @@ fn configure_interrupt(
     unsafe { io_apic.enable_irq(entry_within) };
 }
 
-pub fn configure_ehci_interrupt(irq_descriptor: IrqDescriptor) {
-    // TODO: there might be multiple irqs
-    let gsi = irq_descriptor.irqs[0];
-    configure_interrupt(
-        gsi,
-        IrqAssignments::Ehci as u8,
-        irq_descriptor.trigger,
-        irq_descriptor.polarity,
-    );
-}
+// pub fn configure_ehci_interrupt(irq_descriptor: IrqDescriptor) {
+//     // TODO: there might be multiple irqs
+//     let gsi = irq_descriptor.irqs[0];
+//     configure_interrupt(
+//         gsi,
+//         IrqAssignments::Ehci as u8,
+//         irq_descriptor.trigger,
+//         irq_descriptor.polarity,
+//     );
+// }
 
-pub fn configure_hpet_interrupt(irq: u8) {
-    configure_interrupt(
-        irq.into(),
-        IrqAssignments::Hpet as u8,
-        InterruptTrigger::Edge,
-        InterruptPolarity::ActiveHigh,
-    );
-}
+// pub fn configure_hpet_interrupt(io_irq: u8) {
+//     let cpu_irq = assign_irq(hpet_interrupt_handler);
+//     configure_interrupt(
+//         io_irq.into(),
+//         IrqAssignments::Hpet as u8,
+
+//     );
+// }

@@ -8,7 +8,7 @@ use core::{
 };
 
 use crate::{
-    apic::end_of_interrupt, memory::map_phys, paging::LeafMappingFlags,
+    apic::end_of_interrupt, interrupts::assign_irq, memory::map_phys, paging::LeafMappingFlags,
     pat::STRONG_UNCACHEABLE_INDEX,
 };
 use acpi::{AcpiTables, HpetInfo};
@@ -63,6 +63,8 @@ pub fn init(acpi_tables: &AcpiTables<AcpiHandler>) {
     // Technically we could support 32 bit but to keep code simpler we don't
     assert!(hpet_info.main_counter_is_64bits);
 
+    let hpet_cpu_irq = assign_irq(hpet_interrupt_handler);
+
     let hpet_ptr = NonNull::new(
         map_phys(
             hpet_info.base_address.try_into().unwrap(),
@@ -94,7 +96,7 @@ pub fn init(acpi_tables: &AcpiTables<AcpiHandler>) {
             destination_mode: ApicDestMode::Physical,
             redirection_hint: RedirectionHint::DestId,
             destination_id: 0,
-            interrupt_vector: IrqAssignments::Hpet as u8,
+            interrupt_vector: hpet_cpu_irq,
             delivery_mode: DeliveryMode::Fixed,
         });
         log::debug!("HPET timer 0 configured to use FSB interrupt")
@@ -102,7 +104,12 @@ pub fn init(acpi_tables: &AcpiTables<AcpiHandler>) {
         timer.configure_interrupt(InterruptConfig::LegacyReplacment {
             trigger: InterruptTrigger::Edge,
         });
-        apic::configure_hpet_interrupt(LEGACY_REPLACEMENT_ROUTES[0].apic_mapping);
+        apic::configure_interrupt(
+            LEGACY_REPLACEMENT_ROUTES[0].apic_mapping.into(),
+            hpet_cpu_irq,
+            acpi::aml::resource::InterruptTrigger::Edge,
+            acpi::aml::resource::InterruptPolarity::ActiveHigh,
+        );
         log::debug!("HPET timer 0 routed to legacy replacment");
     } else {
         // Avoid interrupts 0..=15 because they can have legacy sources
@@ -112,7 +119,12 @@ pub fn init(acpi_tables: &AcpiTables<AcpiHandler>) {
             io_apic_irq: io_apic_interrupt_to_use,
             trigger: InterruptTrigger::Edge,
         });
-        apic::configure_hpet_interrupt(io_apic_interrupt_to_use.into());
+        apic::configure_interrupt(
+            io_apic_interrupt_to_use.into(),
+            hpet_cpu_irq,
+            acpi::aml::resource::InterruptTrigger::Edge,
+            acpi::aml::resource::InterruptPolarity::ActiveHigh,
+        );
         log::debug!("HPET timer 0 routed to I/O irq {io_apic_interrupt_to_use:#X}");
     }
     timer.set_mode(TimerMode::Oneshot);
