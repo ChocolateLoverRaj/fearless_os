@@ -48,8 +48,12 @@ run_bios: $(BUILD_DIR)/disk.img
         --machine q35,accel=kvm:whpx:hvf:tcg -d int,cpu_reset -D $(BUILD_DIR)/qemu.log -m 4G \
         --no-reboot \
         -drive file=$(BUILD_DIR)/disk.img,format=raw,if=ide,snapshot=on \
-        -device usb-ehci,id=ehci \
-        -device usb-mouse,bus=ehci.0 \
+        -device usb-ehci,id=ehci0 \
+        -device usb-mouse,bus=ehci0.0 \
+        -device usb-mouse,bus=ehci0.0 \
+        -device usb-ehci,id=ehci1 \
+        -device usb-mouse,bus=ehci1.0 \
+        -device usb-mouse,bus=ehci1.0 \
         --nographic
 
 run_bios_with_graphic: $(BUILD_DIR)/disk.img

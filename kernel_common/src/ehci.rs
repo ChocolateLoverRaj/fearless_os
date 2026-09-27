@@ -17,16 +17,16 @@ use acpi::aml::{
 };
 use arbitrary_int::{traits::Integer, u3, u5};
 use ez_ehci::{
-    AnyEhci, InitDeviceBuffer, InitializedEhci, MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS,
-    PeriodicFrameList, QueueHead, TryTakeOutput, new_ehci,
+    AnyEhci, EhciParts, InitDeviceBuffer, InitializedEhci, MappedMem, PCI_CLASS, PCI_PROG_IF,
+    PCI_SUBCLASS, PeriodicFrameList, QueueHead, TryTakeOutput, new_ehci,
 };
 use ez_pci::{BarWithSize, MemoryBarAddrAndSizeU64, PciAccess, PciFunction};
 use log::logger;
-use spin::Once;
+use spin::{Mutex, Once};
 use x86_64::structures::idt::InterruptStackFrame;
 
 struct EhciInfo {
-    ehci: InitializedEhci,
+    ehci: Mutex<ez_ehci::IrqHandler>,
     segment: u16,
     bus: u8,
     device: u5,
@@ -50,7 +50,9 @@ pub fn run() {
         user_mode_accessible: false,
         pat_index: STRONG_UNCACHEABLE_INDEX,
     };
-    for (segment, data) in PCIE_MAPPINGS.get().unwrap() {
+    let mut ehci_greeter = None;
+    // FIXME: Computers can have multiple eHCI devices, handle ALL of them
+    'find_first_ehci: for (segment, data) in PCIE_MAPPINGS.get().unwrap() {
         let mapped_mem = NonNull::slice_from_raw_parts(
             NonNull::new(data.virt as *mut _).unwrap(),
             SEGMENT_MAPPED_LEN.try_into().unwrap(),
@@ -196,7 +198,24 @@ pub fn run() {
                             .unwrap() as *mut _,
                         )
                         .unwrap();
-                        let ehci = ehci.init(
+                        let greeter_mem = alloc_phys(
+                            size_of::<InitDeviceBuffer>().try_into().unwrap(),
+                            align_of::<InitDeviceBuffer>().try_into().unwrap(),
+                        )
+                        .unwrap();
+                        let greeter_ptr = NonNull::new(
+                            map_phys(
+                                greeter_mem,
+                                size_of::<InitDeviceBuffer>().try_into().unwrap(),
+                                ehci_flags,
+                            )
+                            .unwrap() as *mut _,
+                        )
+                        .unwrap();
+                        let EhciParts {
+                            device_greeter,
+                            irq_handler,
+                        } = ehci.init(
                             MappedMem {
                                 phys_addr: mem_0.try_into().unwrap(),
                                 ptr: ptr_0,
@@ -205,59 +224,34 @@ pub fn run() {
                                 phys_addr: mem_1.try_into().unwrap(),
                                 ptr: ptr_1,
                             },
+                            MappedMem {
+                                phys_addr: greeter_mem.try_into().unwrap(),
+                                ptr: greeter_ptr,
+                            },
                         );
                         log::info!("eHCI initialized");
                         EHCI.call_once(|| EhciInfo {
-                            ehci,
+                            ehci: Mutex::new(irq_handler),
                             segment: *segment,
                             bus: bus_number,
                             device: device_number,
                             function: function_number,
                         });
+                        ehci_greeter = Some(device_greeter);
+                        break 'find_first_ehci;
                     }
                 }
             }
         }
     }
 
-    if let Some(ehci) = EHCI.get() {
-        let ehci = &ehci.ehci;
+    if let Some(mut ehci) = ehci_greeter {
         execute_future(async {
             logger().flush();
             loop {
                 log::info!("running eHCI");
-                let device = ehci.run().await;
+                let device = ehci.wait_for_device_2(&mut HpetDelay).await;
                 log::info!("New device: {device:?}");
-                let mem = alloc_phys(
-                    size_of::<InitDeviceBuffer>().try_into().unwrap(),
-                    align_of::<InitDeviceBuffer>().try_into().unwrap(),
-                )
-                .unwrap();
-                let ptr = NonNull::new(
-                    map_phys(
-                        mem,
-                        size_of::<InitDeviceBuffer>().try_into().unwrap(),
-                        ehci_flags,
-                    )
-                    .unwrap() as *mut _,
-                )
-                .unwrap();
-                match ehci
-                    .init_device(
-                        device.port,
-                        MappedMem {
-                            phys_addr: mem.try_into().unwrap(),
-                            ptr,
-                        },
-                        &mut HpetDelay,
-                    )
-                    .await
-                {
-                    Ok(_) => {}
-                    Err(e) => {
-                        panic!("{e:?}")
-                    }
-                };
             }
         });
     }
@@ -282,9 +276,9 @@ pub extern "x86-interrupt" fn ehci_interrupt_handler(_stack_frame: InterruptStac
         // On Lenovo Ideapad Z560, this IRQ is called even when the PCI status has no interrupt.
         // This seems to be a hardware bug and we ignore these extra IRQs.
         if interrupt_status {
-            ehci.ehci.handle_interrupt();
+            ehci.ehci.try_lock().unwrap().handle_irq();
         } else {
-            // log::warn!("received eHCI interrupt when PCI status indicates no interrupt");
+            log::warn!("received eHCI interrupt when PCI status indicates no interrupt");
         }
     }
     unsafe { end_of_interrupt() };
