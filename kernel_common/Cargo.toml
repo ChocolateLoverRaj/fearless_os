@@ -12,7 +12,7 @@ ez_ehci = { workspace = true, optional = true }
 ez_hpet = { workspace = true }
 ez_pci = { workspace = true }
 force-send-sync = { workspace = true }
-futures = { workspace = true }
+futures = { workspace = true, optional = true, features = ["alloc"] }
 log = { workspace = true }
 owo-colors = { workspace = true }
 pic8259 = { workspace = true }
@@ -29,4 +29,4 @@ zerocopy = { workspace = true }
 x2apic = { workspace = true }
 
 [features]
-alloc = ["dep:talc", "dep:acpi", "dep:ez_ehci"]
+alloc = ["dep:talc", "dep:acpi", "dep:ez_ehci", "dep:futures"]

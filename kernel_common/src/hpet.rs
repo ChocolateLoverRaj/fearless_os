@@ -244,7 +244,7 @@ impl DelayNs for HpetDelay {
     }
 }
 
-pub extern "x86-interrupt" fn hpet_interrupt_handler(_stack_frame: InterruptStackFrame) {
+pub fn hpet_interrupt_handler(_stack_frame: &InterruptStackFrame, vector: u8) {
     handle_irq();
     unsafe { end_of_interrupt() };
 }

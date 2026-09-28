@@ -127,23 +127,3 @@ pub fn configure_interrupt(
     unsafe { io_apic.set_table_entry(entry_within, entry) };
     unsafe { io_apic.enable_irq(entry_within) };
 }
-
-// pub fn configure_ehci_interrupt(irq_descriptor: IrqDescriptor) {
-//     // TODO: there might be multiple irqs
-//     let gsi = irq_descriptor.irqs[0];
-//     configure_interrupt(
-//         gsi,
-//         IrqAssignments::Ehci as u8,
-//         irq_descriptor.trigger,
-//         irq_descriptor.polarity,
-//     );
-// }
-
-// pub fn configure_hpet_interrupt(io_irq: u8) {
-//     let cpu_irq = assign_irq(hpet_interrupt_handler);
-//     configure_interrupt(
-//         io_irq.into(),
-//         IrqAssignments::Hpet as u8,
-
-//     );
-// }

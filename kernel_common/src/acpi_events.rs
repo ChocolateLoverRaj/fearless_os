@@ -1,4 +1,9 @@
-use acpi::{aml, platform::AcpiPlatform, registers::Pm1EventFlags, sdt::fadt::Fadt};
+use acpi::{
+    aml::{self, InterruptModelUsed},
+    platform::AcpiPlatform,
+    registers::Pm1EventFlags,
+    sdt::fadt::Fadt,
+};
 use spin::Once;
 
 use crate::acpi_handler::AcpiHandler;
@@ -22,6 +27,9 @@ pub unsafe fn init(platform: AcpiPlatform<AcpiHandler>) {
         .set_enable_flags(Pm1EventFlags::GLOBAL_ENABLE | Pm1EventFlags::POWER_BUTTON);
     let aml_interpreter = aml::Interpreter::new_from_platform(&platform).unwrap();
     aml_interpreter.initialize_namespace();
+    aml_interpreter
+        .set_interrupt_model_used(InterruptModelUsed::ApicMode)
+        .unwrap();
     ACPI_GLOBALS.call_once(|| AcpiGlobals {
         platform,
         aml_interpreter,

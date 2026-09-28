@@ -14,6 +14,8 @@ pub mod apic;
 pub mod async_executor;
 pub mod config;
 #[cfg(feature = "alloc")]
+pub mod discover_devices;
+#[cfg(feature = "alloc")]
 pub mod ehci;
 pub mod frame_buffer;
 pub mod frame_buffer_embedded_graphics;

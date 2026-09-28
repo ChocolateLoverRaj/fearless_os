@@ -12,17 +12,17 @@ use crate::{
     pat::STRONG_UNCACHEABLE_INDEX,
 };
 use acpi::aml::{
-    InterruptModelUsed,
     namespace::AmlName,
     pci_routing::{PciRoutingTable, Pin},
 };
+use alloc::{collections::btree_map::BTreeMap, vec::Vec};
 use arbitrary_int::{traits::Integer, u3, u5};
 use ez_ehci::{
     AnyEhci, EhciParts, InitDeviceBuffer, MappedMem, PCI_CLASS, PCI_PROG_IF, PCI_SUBCLASS,
     PeriodicFrameList, QueueHead, TryTakeOutput, new_ehci,
 };
 use ez_pci::{BarWithSize, MemoryBarAddrAndSizeU64, PciAccess, PciFunction};
-use log::logger;
+use futures::future::join_all;
 use spin::{Mutex, Once};
 use x86_64::structures::idt::InterruptStackFrame;
 
@@ -34,12 +34,10 @@ struct EhciInfo {
     function: u3,
 }
 
-static EHCI: Once<EhciInfo> = Once::new();
+static IRQ_HANDLERS: Once<BTreeMap<u8, EhciInfo>> = Once::new();
 
 pub fn run() {
     let aml = &ACPI_GLOBALS.get().unwrap().aml_interpreter;
-    aml.set_interrupt_model_used(InterruptModelUsed::ApicMode)
-        .unwrap();
     let pci_routing_table =
         PciRoutingTable::from_prt_path(AmlName::from_str(r#"\_SB.PCI0._PRT"#).unwrap(), &aml)
             .unwrap();
@@ -51,9 +49,9 @@ pub fn run() {
         user_mode_accessible: false,
         pat_index: STRONG_UNCACHEABLE_INDEX,
     };
-    let mut ehci_greeter = None;
-    // FIXME: Computers can have multiple eHCI devices, handle ALL of them
-    'find_first_ehci: for (segment, data) in PCIE_MAPPINGS.get().unwrap() {
+    let mut irq_handlers = BTreeMap::<u8, EhciInfo>::new();
+    let mut ehci_greeters = Vec::new();
+    for (segment, data) in PCIE_MAPPINGS.get().unwrap() {
         let mapped_mem = NonNull::slice_from_raw_parts(
             NonNull::new(data.virt as *mut _).unwrap(),
             SEGMENT_MAPPED_LEN.try_into().unwrap(),
@@ -168,10 +166,10 @@ pub fn run() {
                             }
                         };
 
-                        let hpet_irq = assign_irq(ehci_interrupt_handler);
+                        let ehci_irq = assign_irq(ehci_interrupt_handler);
                         apic::configure_interrupt(
                             irq_descriptor.irqs[0],
-                            hpet_irq,
+                            ehci_irq,
                             irq_descriptor.trigger,
                             irq_descriptor.polarity,
                         );
@@ -236,35 +234,39 @@ pub fn run() {
                             },
                         );
                         log::info!("eHCI initialized");
-                        EHCI.call_once(|| EhciInfo {
-                            ehci: Mutex::new(irq_handler),
-                            segment: *segment,
-                            bus: bus_number,
-                            device: device_number,
-                            function: function_number,
-                        });
-                        ehci_greeter = Some(device_greeter);
-                        break 'find_first_ehci;
+                        irq_handlers.insert(
+                            ehci_irq,
+                            EhciInfo {
+                                ehci: Mutex::new(irq_handler),
+                                segment: *segment,
+                                bus: bus_number,
+                                device: device_number,
+                                function: function_number,
+                            },
+                        );
+                        ehci_greeters.push(device_greeter);
                     }
                 }
             }
         }
     }
+    IRQ_HANDLERS.call_once(|| irq_handlers);
 
-    if let Some(mut ehci) = ehci_greeter {
-        execute_future(async {
-            logger().flush();
+    execute_future(async {
+        join_all(ehci_greeters.into_iter().map(async |mut ehci| {
             loop {
                 log::info!("running eHCI");
                 let device = ehci.wait_for_device_2(&mut HpetDelay).await;
                 log::info!("New device: {device:?}");
             }
-        });
-    }
+        }))
+        .await;
+    });
 }
 
-pub extern "x86-interrupt" fn ehci_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    if let Some(ehci) = EHCI.get() {
+pub fn ehci_interrupt_handler(_stack_frame: &InterruptStackFrame, vector: u8) {
+    if let Some(irq_handlers) = IRQ_HANDLERS.get() {
+        let ehci = irq_handlers.get(&vector).unwrap();
         let data = PCIE_MAPPINGS.get().unwrap().get(&ehci.segment).unwrap();
         let mapped_mem = NonNull::slice_from_raw_parts(
             NonNull::new(data.virt as *mut _).unwrap(),
@@ -284,7 +286,7 @@ pub extern "x86-interrupt" fn ehci_interrupt_handler(_stack_frame: InterruptStac
         if interrupt_status {
             ehci.ehci.try_lock().unwrap().handle_irq();
         } else {
-            log::warn!("received eHCI interrupt when PCI status indicates no interrupt");
+            log::error!("received eHCI interrupt when PCI status indicates no interrupt");
         }
     }
     unsafe { end_of_interrupt() };
